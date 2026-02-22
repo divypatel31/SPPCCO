@@ -1,0 +1,50 @@
+const express = require("express");
+const router = express.Router();
+
+const { verifyToken, authorizeRole } = require("../middleware/authMiddleware");
+const pharmacyController = require("../controllers/pharmacyController");
+
+router.use(verifyToken);
+
+// Admin add medicine
+router.post(
+  "/medicine",
+  authorizeRole("admin"),
+  pharmacyController.addMedicine
+);
+
+// View all medicines
+router.get(
+  "/medicine",
+  authorizeRole("admin", "pharmacist"),
+  pharmacyController.getMedicines
+);
+
+// Update stock
+router.put(
+  "/medicine/:id",
+  authorizeRole("admin"),
+  pharmacyController.updateMedicine
+);
+
+// Generate pharmacy bill
+router.post(
+  "/sell",
+  authorizeRole("pharmacist", "admin"),
+  pharmacyController.sellMedicines
+);
+
+router.get(
+  "/low-stock",
+  authorizeRole("admin", "pharmacist"),
+  pharmacyController.getLowStock
+);
+
+router.get(
+  "/top-selling",
+  authorizeRole("admin"),
+  pharmacyController.getTopSellingMedicines
+);
+
+
+module.exports = router;
