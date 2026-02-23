@@ -43,6 +43,7 @@ import DepartmentManagement from './pages/admin/DepartmentManagement';
 import MedicineManagement from './pages/admin/MedicineManagement';
 import RevenueAnalytics from './pages/admin/RevenueAnalytics';
 import LabTestManagement from "./pages/admin/LabTestManagement";
+import SystemSettings from "./pages/admin/SystemSettings";
 
 // Layout
 import DashboardLayout from './components/layout/DashboardLayout';
@@ -165,6 +166,7 @@ function App() {
             <Route path="lab-tests" element={<LabTestManagement />} />
             <Route path="medicines" element={<MedicineManagement />} />
             <Route path="revenue" element={<RevenueAnalytics />} />
+            <Route path="system-settings" element={<SystemSettings />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

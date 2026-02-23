@@ -92,7 +92,6 @@ exports.getAllUsers = async (req, res) => {
         status,
         created_at
       FROM users
-      WHERE role != 'patient'
       ORDER BY created_at DESC
       `
     );
@@ -234,4 +233,15 @@ exports.toggleLabTestStatus = async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
+};
+
+exports.updateConsultationFee = async (req, res) => {
+  const { consultation_fee } = req.body;
+
+  await db.query(
+    "UPDATE users SET consultation_fee = ? WHERE role = 'admin'",
+    [consultation_fee]
+  );
+
+  res.json({ message: "Consultation fee updated" });
 };

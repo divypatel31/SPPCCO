@@ -2,115 +2,223 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
-import { Activity, ArrowLeft, UserPlus } from 'lucide-react';
+import { Activity, ArrowLeft, UserPlus, ShieldCheck } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export default function RegisterPage() {
   const { register } = useAuth();
   const navigate = useNavigate();
+
   const [form, setForm] = useState({
-    name: '', email: '', phone: '', dob: '',
-    gender: '', address: '', password: '', confirmPassword: ''
+    name: '',
+    email: '',
+    phone: '',
+    dob: '',
+    gender: '',
+    address: '',
+    password: '',
+    confirmPassword: ''
   });
+
   const [loading, setLoading] = useState(false);
 
-  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleChange = (e) => {
+    setForm(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!form.password || form.password.length < 6) {
+      toast.error('Password must be at least 6 characters');
+      return;
+    }
+
     if (form.password !== form.confirmPassword) {
       toast.error('Passwords do not match');
       return;
     }
-    if (form.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
-      return;
-    }
+
     setLoading(true);
+
     try {
       const { confirmPassword, ...payload } = form;
-      await register({ ...payload, role: 'patient' });
-      toast.success('Account created successfully! Please log in.');
+
+      await register({
+        ...payload,
+        role: 'patient'
+      });
+
+      toast.success('Account created successfully!');
       navigate('/login');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Registration failed');
+      toast.error(err?.response?.data?.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
   };
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.05 }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0 }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-8">
-      <div className="w-full max-w-2xl">
-        <div className="flex items-center gap-2 mb-6">
-          <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center">
-            <Activity className="w-5 h-5 text-white" />
-          </div>
-          <span className="font-bold text-gray-900">MediCare HMS</span>
-        </div>
+    <div className="min-h-screen bg-[#F1F5F9] font-sans overflow-x-hidden relative flex items-center justify-center p-6">
 
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-          <div className="flex items-center gap-3 mb-6">
-            <Link to="/login" className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
-              <ArrowLeft size={18} />
-            </Link>
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Patient Registration</h2>
-              <p className="text-gray-500 text-sm">Create your patient account</p>
+      {/* Background */}
+      <div className="absolute inset-0 z-0">
+        <div
+          className="absolute inset-0 opacity-[0.1]"
+          style={{
+            backgroundImage: `radial-gradient(#64748b 0.5px, transparent 0.5px)`,
+            backgroundSize: '30px 30px'
+          }}
+        />
+        <motion.div
+          animate={{ scale: [1, 1.2, 1], rotate: [0, 10, 0] }}
+          transition={{ duration: 25, repeat: Infinity }}
+          className="absolute top-[-20%] right-[-10%] w-[600px] h-[600px] bg-blue-100/50 rounded-full blur-[120px]"
+        />
+      </div>
+
+      <div className="w-full max-w-3xl relative z-10">
+
+        {/* Branding */}
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="flex items-center gap-3 mb-8 ml-2"
+        >
+          <div className="w-10 h-10 rounded-xl bg-[#1e293b] flex items-center justify-center shadow-lg">
+            <Activity className="w-6 h-6 text-white" />
+          </div>
+          <span className="text-xl font-black text-[#1e293b] uppercase">
+            MediCare <span className="text-blue-600">HMS</span>
+          </span>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="bg-white/80 backdrop-blur-2xl rounded-[2.5rem] border border-white p-8 lg:p-12 shadow-xl"
+        >
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-10 gap-4">
+            <div className="flex items-center gap-4">
+              <Link
+                to="/login"
+                className="group p-3 rounded-2xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-100 transition-all"
+              >
+                <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
+              </Link>
+              <div>
+                <h2 className="text-3xl font-bold text-slate-800">Registration</h2>
+                <p className="text-slate-500 text-sm">Join the healthcare network</p>
+              </div>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100">
+              <ShieldCheck className="text-blue-600 w-4 h-4" />
+              <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">
+                Secure Enrollment
+              </span>
             </div>
           </div>
 
+          {/* Form */}
           <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="label">Full Name *</label>
-                <input name="name" className="input-field" placeholder="John Doe" value={form.name} onChange={handleChange} required />
-              </div>
-              <div>
-                <label className="label">Email *</label>
-                <input name="email" type="email" className="input-field" placeholder="john@example.com" value={form.email} onChange={handleChange} required />
-              </div>
-              <div>
-                <label className="label">Phone Number *</label>
-                <input name="phone" className="input-field" placeholder="+91 9876543210" value={form.phone} onChange={handleChange} required />
-              </div>
-              <div>
-                <label className="label">Date of Birth *</label>
-                <input name="dob" type="date" className="input-field" value={form.dob} onChange={handleChange} required />
-              </div>
-              <div>
-                <label className="label">Gender *</label>
-                <select name="gender" className="input-field" value={form.gender} onChange={handleChange} required>
-                  <option value="">Select gender</option>
-                  <option value="male">Male</option>
-                  <option value="female">Female</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="label">Address</label>
-                <input name="address" className="input-field" placeholder="Your address" value={form.address} onChange={handleChange} />
-              </div>
-              <div>
-                <label className="label">Password *</label>
-                <input name="password" type="password" className="input-field" placeholder="Min 6 characters" value={form.password} onChange={handleChange} required />
-              </div>
-              <div>
-                <label className="label">Confirm Password *</label>
-                <input name="confirmPassword" type="password" className="input-field" placeholder="Repeat password" value={form.confirmPassword} onChange={handleChange} required />
-              </div>
-            </div>
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6"
+            >
+              {[
+                { label: 'Full Name', name: 'name', type: 'text', placeholder: 'John Doe' },
+                { label: 'Email Address', name: 'email', type: 'email', placeholder: 'john@example.com' },
+                { label: 'Phone Number', name: 'phone', type: 'text', placeholder: '+91 9876543210' },
+                { label: 'Date of Birth', name: 'dob', type: 'date' },
+                { label: 'Gender', name: 'gender', type: 'select', options: ['Male', 'Female', 'Other'] },
+                { label: 'Residential Address', name: 'address', type: 'text', placeholder: 'City, Country', optional: true },
+                { label: 'Password', name: 'password', type: 'password', placeholder: '••••••••' },
+                { label: 'Confirm Password', name: 'confirmPassword', type: 'password', placeholder: '••••••••' }
+              ].map(field => (
+                <motion.div key={field.name} variants={itemVariants} className="group">
+                  <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block group-focus-within:text-blue-600 transition-colors">
+                    {field.label}
+                  </label>
 
-            <button type="submit" disabled={loading} className="btn-primary w-full mt-6 flex items-center justify-center gap-2 py-2.5">
-              {loading ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> : <UserPlus size={16} />}
-              {loading ? 'Creating Account...' : 'Create Account'}
-            </button>
+                  {field.type === 'select' ? (
+                    <select
+                      name={field.name}
+                      value={form[field.name]}
+                      onChange={handleChange}
+                      required
+                      className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-blue-500 outline-none text-slate-800"
+                    >
+                      <option value="">Select {field.label}</option>
+                      {field.options.map(opt => (
+                        <option key={opt} value={opt.toLowerCase()}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      name={field.name}
+                      type={field.type}
+                      value={form[field.name]}
+                      onChange={handleChange}
+                      placeholder={field.placeholder}
+                      required={!field.optional}
+                      className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-blue-500 outline-none text-slate-800 placeholder-slate-300"
+                    />
+                  )}
+                </motion.div>
+              ))}
+            </motion.div>
+
+            <motion.button
+              whileHover={{ y: -3 }}
+              whileTap={{ scale: 0.98 }}
+              type="submit"
+              disabled={loading}
+              className="w-full mt-12 bg-[#1e293b] hover:bg-[#334155] text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-xl disabled:opacity-60"
+            >
+              {loading ? (
+                <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  <span className="text-lg">Initialize Profile</span>
+                  <UserPlus size={20} />
+                </>
+              )}
+            </motion.button>
           </form>
 
-          <p className="text-center text-sm text-gray-500 mt-4">
-            Already registered?{' '}
-            <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">Sign in</Link>
-          </p>
-        </div>
+          <div className="mt-8 flex justify-center">
+            <Link
+              to="/login"
+              className="text-sm font-bold text-slate-400 hover:text-blue-600 transition-colors"
+            >
+              Already have a profile? Sign In
+            </Link>
+          </div>
+
+        </motion.div>
       </div>
     </div>
   );

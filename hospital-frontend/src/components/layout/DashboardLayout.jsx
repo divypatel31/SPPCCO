@@ -24,7 +24,7 @@ const NAV_ITEMS = {
   receptionist: [
     { to: '/receptionist/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/receptionist/pending-appointments', icon: Clock, label: 'Pending Requests' },
-    { to: '/receptionist/queue', icon: Users, label: "Today's Queue" },
+    { to: '/receptionist/queue', icon: Users, label: "Appointment" },
     { to: '/receptionist/billing', icon: CreditCard, label: 'Billing' },
     { to: '/receptionist/register-patient', icon: UserPlus, label: 'Register Patient' },
   ],
@@ -39,11 +39,12 @@ const NAV_ITEMS = {
   ],
   admin: [
     { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/admin/users', icon: Users, label: 'User Management' },
+    { to: '/admin/users', icon: Users, label: 'User Management' }, 
     { to: '/admin/departments', icon: Building2, label: 'Departments' },
     { to: '/admin/lab-tests', icon: FlaskConical, label: 'Lab Tests' },
     { to: '/admin/medicines', icon: Package, label: 'Medicine Master' },
     { to: '/admin/revenue', icon: TrendingUp, label: 'Revenue Analytics' },
+    { to: '/admin/system-settings', icon: Settings, label: 'Settings' },
   ],
 };
 

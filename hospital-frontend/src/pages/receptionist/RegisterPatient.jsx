@@ -23,11 +23,9 @@ export default function RegisterPatient() {
     setLoading(true);
     try {
       // Use auth register endpoint with walk-in flag
-      const res = await api.post('/auth/register', {
+      const res = await api.post('/receptionist/register-patient', {
         ...form,
-        role: 'patient',
         password: form.phone, // default password = phone number
-        created_by: 'receptionist',
       });
       setCreated(res.data);
       setSuccess(true);

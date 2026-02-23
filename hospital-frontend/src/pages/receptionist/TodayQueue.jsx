@@ -1,88 +1,135 @@
-import React, { useState, useEffect } from 'react';
-import { Spinner, EmptyState, StatusBadge, PageHeader } from '../../components/common';
-import { formatTime } from '../../utils/helpers';
+import React, { useEffect, useState } from 'react';
+import { PageHeader, Spinner, EmptyState } from '../../components/common';
+import { formatDate, formatTime } from '../../utils/helpers';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Users, CheckCircle } from 'lucide-react';
+import { Calendar, X } from 'lucide-react';
 
 export default function TodayQueue() {
-  const [queue, setQueue] = useState([]);
+  const [date, setDate] = useState(
+    new Date().toISOString().split('T')[0]
+  );
+  const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [marking, setMarking] = useState(null);
 
   const fetchQueue = async () => {
+    setLoading(true);
     try {
-      const res = await api.get('/receptionist/today-queue');
-      // Filter today
-      setQueue(res.data || []);
-    } catch { toast.error('Failed to load queue'); }
-    finally { setLoading(false); }
+      const res = await api.get(`/receptionist/queue?date=${date}`);
+      setAppointments(res.data || []);
+    } catch {
+      toast.error("Failed to load queue");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { fetchQueue(); }, []);
+  useEffect(() => {
+    fetchQueue();
+  }, [date]);
 
-  const markArrived = async (id) => {
-    setMarking(id);
+  const handleCancel = async (id) => {
+    if (!window.confirm("Cancel this appointment?")) return;
+
     try {
-      await api.put(`/receptionist/mark-arrived/${id}`);
-      toast.success('Patient marked as arrived!');
+      await api.post('/receptionist/cancel-appointment', {
+        appointment_id: id
+      });
+      toast.success("Appointment cancelled");
       fetchQueue();
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to update');
-    } finally {
-      setMarking(null);
+      toast.error(err.response?.data?.message || "Cancel failed");
     }
   };
 
   if (loading) return <Spinner />;
 
-  const statusOrder = { scheduled: 0, arrived: 1, in_consultation: 2 };
-  const sorted = [...queue].sort((a, b) => {
-    const statusDiff = (statusOrder[a.status] || 0) - (statusOrder[b.status] || 0);
-    if (statusDiff !== 0) return statusDiff;
-    return (a.start_time || '').localeCompare(b.start_time || '');
-  });
-
   return (
     <div>
-      <PageHeader title="Today's Queue" subtitle={`${queue.length} patients scheduled today`} />
+      <PageHeader
+        title="Appointment Queue"
+        subtitle={`Viewing appointments for ${formatDate(date)}`}
+      />
 
-      {sorted.length === 0 ? (
+      {/* Date Selector */}
+      <div className="card mb-4 p-4 flex items-center gap-4">
+        <label className="font-medium">Select Date:</label>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="input-field w-auto"
+        />
+      </div>
+
+      {appointments.length === 0 ? (
         <div className="card">
-          <EmptyState icon={Users} title="Queue is empty" description="No scheduled appointments for today" />
+          <EmptyState
+            icon={Calendar}
+            title="No appointments"
+            description="No appointments found for this date"
+          />
         </div>
       ) : (
-        <div className="space-y-3">
-          {sorted.map((appt, idx) => (
-            <div key={appt.appointment_id} className={`card flex items-center justify-between ${appt.status === 'arrived' ? 'border-blue-200 bg-blue-50' : ''}`}>
-              <div className="flex items-center gap-4">
-                <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600 text-sm flex-shrink-0">
-                  {idx + 1}
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-900">{appt.patient_name || 'Patient'}</p>
-                  <p className="text-xs text-gray-500">
-                    {appt.department} · Dr. {appt.doctor_name || 'Not assigned'} · {formatTime(appt.start_time)}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge status={appt.status} />
-                {appt.status === 'scheduled' && (
-                  <button
-                    onClick={() => markArrived(appt.appointment_id)}
-                    disabled={marking === (appt._id || appt.id)}
-                    className="btn-success text-xs py-1.5 px-3 flex items-center gap-1"
-                  >
-                    {marking === (appt._id || appt.id) ? (
-                      <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
-                    ) : <CheckCircle size={12} />}
-                    Mark Arrived
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+        <div className="card p-0">
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Patient</th>
+                  <th>Doctor</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {appointments.map(appt => (
+                  <tr key={appt.appointment_id}>
+                    <td>{formatTime(appt.appointment_time)}</td>
+                    <td>{appt.patient_name}</td>
+                    <td>
+                      {appt.doctor_name
+                        ? `Dr. ${appt.doctor_name}`
+                        : <span className="text-gray-400">Not Assigned</span>
+                      }
+                    </td>
+
+                    {/* STATUS */}
+                    <td>
+                      {appt.status === 'cancelled' ? (
+                        <span className="text-red-600 font-medium">
+                          Cancelled {appt.cancelled_by === 'patient'
+                            ? 'by Patient'
+                            : appt.cancelled_by === 'receptionist'
+                              ? 'by Receptionist'
+                              : appt.cancelled_by === 'doctor'
+                                ? 'by Doctor'
+                                : ''}
+                        </span>
+                      ) : (
+                        <span className="text-green-600 font-medium capitalize">
+                          {appt.status}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* ACTION */}
+                    <td>
+                      {appt.status !== 'cancelled' && (
+                        <button
+                          onClick={() => handleCancel(appt.appointment_id)}
+                          className="text-red-600 hover:text-red-800 text-xs flex items-center gap-1"
+                        >
+                          <X size={12} /> Cancel
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

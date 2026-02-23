@@ -42,7 +42,7 @@ app.use("/api/lab", labRoutes);
 app.use("/api/lab-request", labRequestRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/pharmacy", pharmacyRoutes);
-app.use("/api/admin/departments", departmentRoutes);
+app.use("/api/departments", departmentRoutes);
 
 /* Root Test */
 app.get("/", (req, res) => {

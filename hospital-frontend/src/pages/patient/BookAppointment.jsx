@@ -32,7 +32,11 @@ export default function BookAppointment() {
 
   const [loading, setLoading] = useState(false);
   const [bookedSlots, setBookedSlots] = useState([]);
-  const today = new Date().toISOString().split('T')[0];
+  const todayDateObj = new Date();
+  const today = todayDateObj.toISOString().split('T')[0];
+  const maxDateObj = new Date();
+  maxDateObj.setDate(todayDateObj.getDate() + 7);
+  const maxDate = maxDateObj.toISOString().split('T')[0];
   const [departments, setDepartments] = useState([]);
 
   /* 🔥 Fetch booked slots */
@@ -57,14 +61,9 @@ export default function BookAppointment() {
   useEffect(() => {
     const fetchDepartments = async () => {
       try {
-        const res = await api.get('/admin/departments');
+        const res = await api.get('/departments/public');
 
-        // show only active departments
-        const activeDepartments = res.data.filter(
-          d => d.status === 'active'
-        );
-
-        setDepartments(activeDepartments);
+        setDepartments(res.data);
       } catch (err) {
         toast.error('Failed to load departments');
       }
@@ -91,6 +90,37 @@ export default function BookAppointment() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const isPastTimeSlot = (slot) => {
+    if (!form.appointment_date) return false;
+
+    const now = new Date();
+    const selectedDate = new Date(form.appointment_date);
+
+    // 🔥 Block past dates
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (selectedDate < today) {
+      return true; // Past date = not allowed
+    }
+
+    // 🔥 If future date → allow all slots
+    if (selectedDate > today) {
+      return false;
+    }
+
+    // 🔥 If today → check time
+    const [hour, minute] = slot.split(':');
+
+    const slotDateTime = new Date();
+    slotDateTime.setHours(parseInt(hour));
+    slotDateTime.setMinutes(parseInt(minute));
+    slotDateTime.setSeconds(0);
+    slotDateTime.setMilliseconds(0);
+
+    return slotDateTime <= now; // block current & past time
   };
 
   return (
@@ -129,6 +159,7 @@ export default function BookAppointment() {
                 type="date"
                 className="input-field"
                 min={today}
+                max={maxDate}
                 value={form.appointment_date}
                 onChange={e => setForm({ ...form, appointment_date: e.target.value, start_time: '' })}
                 required
@@ -145,15 +176,17 @@ export default function BookAppointment() {
               <div className="grid grid-cols-4 gap-2">
                 {TIME_SLOTS.map(slot => {
                   const isBooked = bookedSlots.includes(slot);
+                  const isPast = isPastTimeSlot(slot);
+                  const disabled = isBooked || isPast;
 
                   return (
                     <button
                       key={slot}
                       type="button"
-                      disabled={isBooked}
+                      disabled={disabled}
                       onClick={() => !isBooked && setForm({ ...form, start_time: slot })}
                       className={`py-2 px-1 rounded-lg text-xs font-medium border transition-all
-                        ${isBooked
+                        ${disabled
                           ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
                           : form.start_time === slot
                             ? 'bg-blue-600 text-white border-blue-600'

@@ -51,6 +51,21 @@ export default function PendingAppointments() {
     }
   };
 
+  const handleCancel = async (appointmentId) => {
+    if (!window.confirm("Are you sure you want to cancel this appointment?")) return;
+
+    try {
+      await api.post('/receptionist/cancel-appointment', {
+        appointment_id: appointmentId
+      });
+
+      toast.success("Appointment cancelled");
+      fetchData(); // refresh table
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Cancel failed");
+    }
+  };
+
   if (loading) return <Spinner />;
 
   return (
@@ -95,12 +110,19 @@ export default function PendingAppointments() {
                       })() : '—'}
                     </td>
                     <td><StatusBadge status={appt.status} /></td>
-                    <td>
+                    <td className="flex gap-2">
                       <button
                         onClick={() => { setSelected(appt); setDoctorId(''); }}
                         className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1"
                       >
-                        <UserCheck size={12} /> Assign Doctor
+                        <UserCheck size={12} /> Assign
+                      </button>
+
+                      <button
+                        onClick={() => handleCancel(appt.appointment_id)}
+                        className="bg-red-500 hover:bg-red-600 text-white text-xs py-1.5 px-3 rounded-lg"
+                      >
+                        Cancel
                       </button>
                     </td>
                   </tr>

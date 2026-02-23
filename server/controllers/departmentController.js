@@ -78,3 +78,19 @@ exports.toggleDepartmentStatus = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+exports.getActiveDepartments = async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT department_id, name
+      FROM departments
+      WHERE status = 'active'
+      ORDER BY name ASC
+    `);
+
+    res.json(rows);
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

@@ -3,13 +3,13 @@ const router = express.Router();
 const departmentController = require("../controllers/departmentController");
 const { verifyToken, authorizeRole } = require("../middleware/authMiddleware");
 
-router.use(verifyToken);
+/* 🌍 PUBLIC (any logged in user) */
+router.get("/public", verifyToken, departmentController.getActiveDepartments);
 
-// Because already mounted at /api/admin/departments
-router.get("/", authorizeRole("admin"), departmentController.getDepartments);
-router.post("/", authorizeRole("admin"), departmentController.createDepartment);
-
-router.put("/:id", authorizeRole("admin"), departmentController.updateDepartment);
-router.patch("/:id/toggle", authorizeRole("admin"), departmentController.toggleDepartmentStatus);
+/* 🔒 ADMIN ONLY */
+router.get("/", verifyToken, authorizeRole("admin"), departmentController.getDepartments);
+router.post("/", verifyToken, authorizeRole("admin"), departmentController.createDepartment);
+router.put("/:id", verifyToken, authorizeRole("admin"), departmentController.updateDepartment);
+router.patch("/:id/toggle", verifyToken, authorizeRole("admin"), departmentController.toggleDepartmentStatus);
 
 module.exports = router;

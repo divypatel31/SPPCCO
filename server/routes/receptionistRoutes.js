@@ -26,8 +26,20 @@ router.post("/generate-bill", receptionistController.generateBill);
 // 6️⃣ Mark bill paid
 router.put("/mark-paid/:id", receptionistController.markBillPaid);
 
+// 7️⃣ Register Walk-in Patient
+router.post("/register-patient", receptionistController.registerWalkInPatient);
+
 router.get("/doctors", receptionistController.getDoctorsByDepartment);
 
 router.get("/today-queue", receptionistController.getTodayQueue);
+
+router.post("/cancel-appointment", receptionistController.cancelAppointmentByReceptionist);
+
+router.get(
+  "/queue",
+  verifyToken,
+  authorizeRole("receptionist"),
+  receptionistController.getQueueByDate
+);
 
 module.exports = router;

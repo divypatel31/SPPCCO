@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { ROLE_DASHBOARDS } from '../../utils/helpers';
 import toast from 'react-hot-toast';
-import { Activity, Eye, EyeOff, LogIn } from 'lucide-react';
+import { Activity, Eye, EyeOff, ArrowRight, Fingerprint } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -12,138 +12,158 @@ export default function LoginPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!form.email || !form.password) {
-    toast.error('Please fill in all fields');
-    return;
-  }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  setLoading(true);
-  try {
-    await login(form.email, form.password);
-    toast.success('Login successful!');
-    navigate('/', { replace: true });
-  } catch (err) {
-    toast.error(err.response?.data?.message || 'Invalid credentials');
-  } finally {
-    setLoading(false);
-  }
-};
+    if (!form.email || !form.password) {
+      toast.error('Please fill in all fields');
+      return;
+    }
 
+    setLoading(true);
+    try {
+      await login(form.email, form.password);
+      toast.success('Access Verified');
+      navigate('/', { replace: true });
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Invalid Credentials');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left Panel */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-700 to-blue-900 items-center justify-center p-12">
-        <div className="text-white max-w-md">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center">
-              <Activity className="w-7 h-7 text-white" />
-            </div>
-            <span className="text-2xl font-bold">MediCare HMS</span>
-          </div>
-          <h1 className="text-4xl font-bold mb-4 leading-tight">
-            Complete Hospital Management System
-          </h1>
-          <p className="text-blue-200 text-lg mb-8">
-            Role-based access for Patients, Doctors, Receptionists, Lab Technicians, Pharmacists & Admins.
-          </p>
-          <div className="space-y-3">
-            {[
-              ['🏥', 'Patient Self-Registration'],
-              ['🩺', 'Doctor Consultation Workflow'],
-              ['🧪', 'Lab Test Management'],
-              ['💊', 'Pharmacy Billing'],
-              ['💰', 'Revenue Analytics'],
-            ].map(([icon, text]) => (
-              <div key={text} className="flex items-center gap-3">
-                <span className="text-lg">{icon}</span>
-                <span className="text-blue-100">{text}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+    <div className="min-h-screen flex bg-[#F1F5F9] font-sans overflow-hidden relative">
+      
+      {/* Background */}
+      <div className="absolute inset-0 z-0">
+        <div
+          className="absolute inset-0 opacity-[0.12]"
+          style={{
+            backgroundImage: `radial-gradient(#64748b 0.8px, transparent 0.8px)`,
+            backgroundSize: '32px 32px'
+          }}
+        />
+        <motion.div
+          animate={{ x: [0, 80, 0], y: [0, 40, 0] }}
+          transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute top-[-5%] left-[5%] w-[600px] h-[600px] bg-slate-200/40 rounded-full blur-[120px]"
+        />
       </div>
 
-      {/* Right Panel */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
-        <div className="w-full max-w-md">
-          {/* Mobile logo */}
-          <div className="lg:hidden flex items-center gap-2 mb-8 justify-center">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center">
-              <Activity className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-xl font-bold text-gray-900">MediCare HMS</span>
-          </div>
+      {/* Left Branding */}
+      <div className="hidden lg:flex lg:w-1/2 relative z-10 items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 1.2 }}
+          className="flex flex-col items-center text-center"
+        >
+          <motion.div
+            animate={{ y: [0, -10, 0] }}
+            transition={{ duration: 5, repeat: Infinity }}
+            className="mb-10 w-28 h-28 bg-white shadow-lg rounded-[2.5rem] flex items-center justify-center"
+          >
+            <Activity className="text-[#475569] w-14 h-14" />
+          </motion.div>
 
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-1">Sign in</h2>
-            <p className="text-gray-500 text-sm mb-6">Enter your credentials to access your portal</p>
+          <h1 className="text-[110px] font-black leading-none tracking-tighter text-[#1e293b]">
+            MediCare
+            <span className="block text-[#64748b]">HMS</span>
+          </h1>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="h-2 bg-[#1e293b] mt-8 rounded-full opacity-20 w-28" />
+        </motion.div>
+      </div>
+
+      {/* Right Login Panel */}
+      <div className="flex-1 flex items-center justify-center p-8 relative z-20">
+        <motion.div
+          initial={{ opacity: 0, x: 40 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8 }}
+          className="w-full max-w-[440px]"
+        >
+          <div className="bg-white/80 backdrop-blur-3xl rounded-[3.5rem] border border-white/50 p-12 shadow-xl">
+            
+            <div className="mb-14 flex justify-between items-start">
               <div>
-                <label className="label">Email Address</label>
+                <h3 className="text-4xl font-bold text-slate-900">Login</h3>
+                <p className="text-slate-400 text-sm mt-1">Authorized Personnel Only</p>
+              </div>
+              <div className="p-3 bg-slate-50 rounded-2xl text-slate-300">
+                <Fingerprint size={28} />
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-8">
+              {/* Email */}
+              <div className="relative group">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 mb-2 block">
+                  Identifier
+                </label>
                 <input
                   type="email"
-                  className="input-field"
-                  placeholder="you@example.com"
                   value={form.email}
                   onChange={e => setForm({ ...form, email: e.target.value })}
+                  placeholder="xyz@gmail.com"
+                  className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-slate-400 outline-none text-slate-800 text-lg"
                   required
                 />
               </div>
 
-              <div>
-                <label className="label">Password</label>
-                <div className="relative">
-                  <input
-                    type={showPwd ? 'text' : 'password'}
-                    className="input-field pr-10"
-                    placeholder="••••••••"
-                    value={form.password}
-                    onChange={e => setForm({ ...form, password: e.target.value })}
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    onClick={() => setShowPwd(!showPwd)}
-                  >
-                    {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
+              {/* Password */}
+              <div className="relative group">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 mb-2 block">
+                  Access Key
+                </label>
+                <input
+                  type={showPwd ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={e => setForm({ ...form, password: e.target.value })}
+                  placeholder="••••••••"
+                  className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-slate-400 outline-none text-slate-800 text-lg"
+                  required
+                />
+                <button
+                  type="button"
+                  className="absolute right-0 bottom-3 text-slate-300 hover:text-slate-600"
+                  onClick={() => setShowPwd(prev => !prev)}
+                >
+                  {showPwd ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
               </div>
 
-              <button
+              {/* Submit */}
+              <motion.button
+                whileHover={{ y: -3 }}
+                whileTap={{ scale: 0.98 }}
                 type="submit"
                 disabled={loading}
-                className="btn-primary w-full flex items-center justify-center gap-2 py-2.5"
+                className="w-full mt-10 bg-[#1e293b] text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-lg disabled:opacity-60"
               >
                 {loading ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                  <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                  <LogIn size={16} />
+                  <>
+                    <span className="text-lg">Enter System</span>
+                    <ArrowRight size={20} />
+                  </>
                 )}
-                {loading ? 'Signing in...' : 'Sign In'}
-              </button>
+              </motion.button>
             </form>
 
-            <div className="mt-4 pt-4 border-t border-gray-100 text-center">
-              <p className="text-sm text-gray-500">
-                New patient?{' '}
-                <Link to="/register" className="text-blue-600 hover:text-blue-700 font-medium">
-                  Register here
-                </Link>
-              </p>
+            <div className="mt-14 text-center">
+              <Link
+                to="/register"
+                className="text-xs font-black text-slate-300 hover:text-slate-500 uppercase tracking-[0.15em]"
+              >
+                Request Access Profile
+              </Link>
             </div>
 
-            <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-              <p className="text-xs text-blue-700 font-medium">ℹ️ Your role is auto-detected after login. No manual role selection required.</p>
-            </div>
           </div>
-        </div>
+        </motion.div>
       </div>
     </div>
   );

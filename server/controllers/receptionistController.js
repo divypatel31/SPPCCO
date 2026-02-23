@@ -1,5 +1,49 @@
 const db = require("../config/db");
+const bcrypt = require("bcryptjs");
 
+/* ==============================
+   7️⃣ REGISTER WALK-IN PATIENT
+================================= */
+exports.registerWalkInPatient = async (req, res) => {
+  try {
+    const { name, phone, dob, gender, address, email } = req.body;
+
+    if (!name || !phone || !dob || !gender) {
+      return res.status(400).json({ message: "Required fields missing" });
+    }
+
+    // Check existing phone
+    const [existing] = await db.query(
+      "SELECT user_id FROM users WHERE phone = ?",
+      [phone]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({ message: "Patient already exists with this phone" });
+    }
+
+    // Default password = phone number
+    const hashedPassword = await bcrypt.hash(phone, 10);
+
+    const [result] = await db.query(
+      `INSERT INTO users 
+       (full_name, phone, email, password, role, dob, gender, address, status)
+       VALUES (?, ?, ?, ?, 'patient', ?, ?, ?, 'active')`,
+      [name, phone, email || null, hashedPassword, dob, gender, address || null]
+    );
+
+    res.status(201).json({
+      message: "Patient registered successfully",
+      user_id: result.insertId,
+      name,
+      phone
+    });
+
+  } catch (error) {
+    console.error("REGISTER WALK-IN ERROR:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 /* ==============================
    1️⃣ GET PENDING APPOINTMENTS
 ================================= */
@@ -296,6 +340,123 @@ exports.getTodayQueue = async (req, res) => {
 
   } catch (error) {
     console.error("TODAY QUEUE ERROR:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.cancelAppointmentByReceptionist = async (req, res) => {
+  try {
+    const { appointment_id } = req.body;
+
+    if (!appointment_id) {
+      return res.status(400).json({ message: "Appointment ID required" });
+    }
+
+    await db.execute(
+      `UPDATE appointments 
+   SET status='cancelled', cancelled_by='receptionist'
+   WHERE appointment_id=?`,
+      [appointment_id]
+    );
+
+    res.json({ message: "Appointment cancelled successfully" });
+
+  } catch (err) {
+    console.error("RECEPTIONIST CANCEL ERROR:", err);
+    res.status(500).json({ message: "Cancel failed" });
+  }
+};
+
+exports.getQueueByDate = async (req, res) => {
+  try {
+    const { date } = req.query;
+
+    if (!date) {
+      return res.status(400).json({ message: "Date is required" });
+    }
+
+    const [rows] = await db.execute(
+      `SELECT 
+        a.appointment_id,
+        a.appointment_date,
+        a.appointment_time,
+        a.status,
+        a.cancelled_by,
+        p.full_name AS patient_name,
+        d.full_name AS doctor_name
+       FROM appointments a
+       JOIN users p ON a.patient_id = p.user_id
+       LEFT JOIN users d ON a.doctor_id = d.user_id
+       WHERE a.appointment_date = ?
+       ORDER BY a.appointment_time ASC`,
+      [date]
+    );
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error("QUEUE ERROR:", err);
+    res.status(500).json({ message: "Failed to load queue" });
+  }
+};
+
+
+/* ==============================
+   7️⃣ REGISTER WALK-IN PATIENT
+================================= */
+exports.registerWalkInPatient = async (req, res) => {
+  try {
+    const { name, phone, dob, gender, address, email } = req.body;
+
+    if (!name || !phone || !email || !dob || !gender) {
+      return res.status(400).json({ message: "Required fields missing" });
+    }
+
+    // Check existing phone 
+    const [existingEmail] = await db.query(
+      "SELECT user_id FROM users WHERE email = ?",
+      [email]
+    );
+
+    if (existingEmail.length > 0) {
+      return res.status(400).json({ message: "Email already exists" });
+    }
+    const [existing] = await db.query(
+      "SELECT user_id FROM users WHERE phone = ?",
+      [phone]
+    );
+
+    if (existing.length > 0) {
+      return res.status(400).json({ message: "Patient already exists with this phone" });
+    }
+
+    // Default password = phone number
+    const hashedPassword = await bcrypt.hash(phone, 10);
+
+    const [result] = await db.query(
+      `INSERT INTO users 
+   (full_name, email, phone, password_hash, role, dob, gender, address, status, created_by)
+   VALUES (?, ?, ?, ?, 'patient', ?, ?, ?, 'active', 'receptionist')`,
+      [
+        name,
+        email,
+        phone,
+        hashedPassword,
+        dob,
+        gender,
+        address || null
+      ]
+    );
+
+    res.status(201).json({
+      message: "Patient registered successfully",
+      user_id: result.insertId,
+      name,
+      phone
+    });
+
+  } catch (error) {
+    console.error("REGISTER WALK-IN ERROR:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

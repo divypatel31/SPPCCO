@@ -15,6 +15,7 @@ router.use(authorizeRole("admin"));
 
 router.get("/dashboard", adminController.getDashboardStats);
 router.get("/monthly-revenue", adminController.getMonthlyRevenue);
+router.put("/consultation-fee",authorizeRole("admin"),adminController.updateConsultationFee);
 
 /* =========================
    USER MANAGEMENT

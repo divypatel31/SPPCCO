@@ -5,7 +5,7 @@ import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import { Users, UserPlus } from 'lucide-react';
 
-const ROLES = ['doctor', 'receptionist', 'lab', 'pharmacist'];
+const ROLES = ['doctor', 'receptionist', 'lab', 'pharmacist', 'patient'];
 
 const emptyForm = {
   name: '',
@@ -24,6 +24,7 @@ export default function UserManagement() {
   const [creating, setCreating] = useState(false);
   const [editingUserId, setEditingUserId] = useState(null);
   const [departments, setDepartments] = useState([]);
+  const [activeRole, setActiveRole] = useState('all');
 
   const fetchUsers = async () => {
     try {
@@ -136,6 +137,11 @@ export default function UserManagement() {
     }
   };
 
+  const filteredUsers =
+    activeRole === 'all'
+      ? users
+      : users.filter(u => u.role === activeRole);
+
   if (loading) return <Spinner />;
 
   return (
@@ -144,9 +150,11 @@ export default function UserManagement() {
         title="User Management"
         subtitle="Create and manage staff accounts"
         action={
-          <button onClick={openCreateModal} className="btn-primary flex items-center gap-2">
-            <UserPlus size={16} /> Create Staff Account
-          </button>
+          activeRole !== 'patient' && (
+            <button onClick={openCreateModal} className="btn-primary flex items-center gap-2">
+              <UserPlus size={16} /> Create Staff Account
+            </button>
+          )
         }
       />
 
@@ -165,6 +173,26 @@ export default function UserManagement() {
         </div>
       ) : (
         <div className="card p-0">
+          <div className="flex gap-2 mb-6 flex-wrap">
+            {['all', ...ROLES].map(role => (
+              <button
+                key={role}
+                onClick={() => setActiveRole(role)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition 
+        ${activeRole === role
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 hover:bg-gray-200'
+                  }`}
+              >
+                {role === 'all'
+                  ? `All Staff (${users.length})`
+                  : `${role === 'lab'
+                    ? 'Lab Technician'
+                    : role.charAt(0).toUpperCase() + role.slice(1)
+                  } (${users.filter(u => u.role === role).length})`}
+              </button>
+            ))}
+          </div>
           <div className="table-container">
             <table className="table">
               <thead>
@@ -179,7 +207,7 @@ export default function UserManagement() {
                 </tr>
               </thead>
               <tbody>
-                {users.map(u => (
+                {filteredUsers.map(u => (
                   <tr key={u.user_id}>
                     <td className="font-medium">{u.full_name}</td>
                     <td className="text-gray-500">{u.email}</td>
@@ -188,20 +216,24 @@ export default function UserManagement() {
                     <td>{formatDate(u.created_at)}</td>
                     <td><StatusBadge status={u.status || 'active'} /></td>
                     <td>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEdit(u)}
-                          className="text-xs text-blue-600 hover:underline"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleToggleStatus(u.user_id)}
-                          className="text-xs text-red-600 hover:underline"
-                        >
-                          {u.status === "active" ? "Deactivate" : "Activate"}
-                        </button>
-                      </div>
+                      {u.role !== 'patient' ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleEdit(u)}
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleToggleStatus(u.user_id)}
+                            className="text-xs text-red-600 hover:underline"
+                          >
+                            {u.status === "active" ? "Deactivate" : "Activate"}
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">View Only</span>
+                      )}
                     </td>
                   </tr>
                 ))}
