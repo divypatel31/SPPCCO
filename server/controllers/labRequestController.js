@@ -6,22 +6,35 @@ const db = require("../config/db");
 exports.createLabRequest = async (req, res) => {
     try {
         const doctorId = req.user.id;
-        const { appointment_id, patient_id, test_name, department, test_price } = req.body;
+        const { appointment_id, test_name, department, test_price } = req.body;
 
-        if (!appointment_id || !patient_id || !test_name || !test_price) {
+        if (!appointment_id || !test_name || !test_price) {
             return res.status(400).json({ message: "Missing required fields" });
         }
 
+        // Get patient_id from appointment
+        const [appointment] = await db.execute(
+            "SELECT patient_id FROM appointments WHERE appointment_id = ?",
+            [appointment_id]
+        );
+
+        if (appointment.length === 0) {
+            return res.status(400).json({ message: "Invalid appointment" });
+        }
+
+        const patient_id = appointment[0].patient_id;
+
         await db.execute(
             `INSERT INTO lab_requests
-       (appointment_id, patient_id, doctor_id, test_name, department, test_price)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+             (appointment_id, patient_id, doctor_id, test_name, department, test_price)
+             VALUES (?, ?, ?, ?, ?, ?)`,
             [appointment_id, patient_id, doctorId, test_name, department || null, test_price]
         );
 
         res.status(201).json({ message: "Lab request created successfully" });
 
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: error.message });
     }
 };

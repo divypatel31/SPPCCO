@@ -16,7 +16,7 @@ router.post(
 // View all medicines
 router.get(
   "/medicine",
-  authorizeRole("admin", "pharmacist"),
+  authorizeRole("admin", "pharmacist", "doctor"),
   pharmacyController.getMedicines
 );
 

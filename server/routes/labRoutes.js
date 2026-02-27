@@ -10,7 +10,7 @@ router.use(verifyToken);
 // Only lab technician can access
 router.use(authorizeRole("lab"));
 
-// View department lab requests
+// View department lab requestswhen 
 router.get("/requests", labController.getLabRequests);
 
 // Complete test

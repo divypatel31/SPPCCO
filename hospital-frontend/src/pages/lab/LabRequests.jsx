@@ -15,7 +15,7 @@ export default function LabRequests() {
 
   const fetchRequests = async () => {
     try {
-      const res = await api.get('/lab-request');
+      const res = await api.get('/lab/requests');
       setRequests(res.data || []);
     } catch { toast.error('Failed to load'); }
     finally { setLoading(false); }
@@ -26,10 +26,16 @@ export default function LabRequests() {
   const handleComplete = async () => {
     setCompleting(true);
     try {
-      await api.put(`/lab-request/${selected._id || selected.id}/complete`, resultForm);
+      await api.put(`/lab/complete/${selected.request_id}`, {
+        result: resultForm.result,
+        status: resultForm.status
+      });
       toast.success('Test completed and report uploaded!');
       setSelected(null);
-      setResultForm({ result: '', remarks: '', status: 'in_progress' });
+      setResultForm({
+        result: selected.status === "in_progress" ? selected.result || '' : '',
+        status: selected.status === "in_progress" ? "completed" : "in_progress"
+      });
       fetchRequests();
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to complete test');
@@ -51,9 +57,8 @@ export default function LabRequests() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors ${
-              filter === f ? 'bg-orange-500 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-            }`}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors ${filter === f ? 'bg-orange-500 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
           >
             {f.replace(/_/g, ' ')} {f === 'all' && `(${requests.length})`}
           </button>
@@ -125,10 +130,21 @@ export default function LabRequests() {
 
             <div>
               <label className="label">Update Status</label>
-              <select className="input-field" value={resultForm.status} onChange={e => setResultForm({ ...resultForm, status: e.target.value })}>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-              </select>
+              {selected.status === "pending" && (
+                <div>
+                  <label className="label">Update Status</label>
+                  <select
+                    className="input-field"
+                    value={resultForm.status}
+                    onChange={e =>
+                      setResultForm({ ...resultForm, status: e.target.value })
+                    }
+                  >
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+              )}
             </div>
 
             <div>
@@ -155,7 +171,9 @@ export default function LabRequests() {
               <button onClick={() => setSelected(null)} className="btn-secondary flex-1">Cancel</button>
               <button onClick={handleComplete} disabled={completing} className="btn-primary flex-1 flex items-center justify-center gap-2">
                 {completing ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> : <CheckCircle size={14} />}
-                {resultForm.status === 'completed' ? 'Complete & Upload' : 'Save Progress'}
+                {selected.status === "in_progress" || resultForm.status === "completed"
+                  ? "Complete & Upload"
+                  : "Save Progress"}
               </button>
             </div>
           </div>

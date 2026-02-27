@@ -24,19 +24,41 @@ exports.getMyAppointments = async (req, res) => {
 /* 2️⃣ START CONSULTATION */
 exports.startConsultation = async (req, res) => {
   try {
+    const doctor_id = req.user.id;
     const appointment_id = req.params.id;
 
+    const [rows] = await db.execute(
+      `SELECT status 
+       FROM appointments 
+       WHERE appointment_id=? AND doctor_id=?`,
+      [appointment_id, doctor_id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    if (rows[0].status !== "arrived") {
+      return res.status(400).json({
+        message: "Consultation can only start after patient arrival"
+      });
+    }
+
     await db.execute(
-      "UPDATE appointments SET status='in_consultation' WHERE appointment_id=?",
+      `UPDATE appointments 
+       SET status='in_consultation'
+       WHERE appointment_id=?`,
       [appointment_id]
     );
 
-    res.json({ message: "Consultation started" });
+    res.json({ message: "Consultation started successfully" });
 
   } catch (err) {
+    console.error("START ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
+
 /* 3️⃣ ADD MEDICAL RECORD */
 exports.addMedicalRecord = async (req, res) => {
   try {
@@ -148,14 +170,97 @@ exports.addLabRequest = async (req, res) => {
 /* 6️⃣ COMPLETE CONSULTATION */
 exports.completeConsultation = async (req, res) => {
   try {
+    const doctor_id = req.user.id;
     const appointment_id = req.params.id;
 
+    const [rows] = await db.execute(
+      `SELECT status 
+       FROM appointments 
+       WHERE appointment_id=? AND doctor_id=?`,
+      [appointment_id, doctor_id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    if (rows[0].status !== "in_consultation") {
+      return res.status(400).json({
+        message: "Consultation must be started first"
+      });
+    }
+
     await db.execute(
-      "UPDATE appointments SET status='completed' WHERE appointment_id=?",
+      `UPDATE appointments 
+       SET status='completed'
+       WHERE appointment_id=?`,
       [appointment_id]
     );
 
     res.json({ message: "Consultation completed" });
+
+  } catch (err) {
+    console.error("COMPLETE ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/* 7️⃣ GET SINGLE APPOINTMENT */
+exports.getAppointmentById = async (req, res) => {
+  try {
+    const doctor_id = req.user.id;
+    const appointment_id = req.params.id;
+
+    const [rows] = await db.execute(
+      `SELECT a.*, u.full_name AS patient_name
+       FROM appointments a
+       JOIN users u ON a.patient_id = u.user_id
+       WHERE a.appointment_id=? AND a.doctor_id=?`,
+      [appointment_id, doctor_id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    res.json(rows[0]);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/* 0️⃣ DOCTOR CANCEL APPOINTMENT */
+exports.cancelAppointment = async (req, res) => {
+  try {
+    const doctor_id = req.user.id;
+    const appointment_id = req.params.id;
+
+    const [rows] = await db.execute(
+      `SELECT status 
+       FROM appointments 
+       WHERE appointment_id=? AND doctor_id=?`,
+      [appointment_id, doctor_id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Appointment not found" });
+    }
+
+    if (rows[0].status !== "scheduled") {
+      return res.status(400).json({
+        message: "Cannot cancel after patient arrived or consultation started"
+      });
+    }
+
+    await db.execute(
+      `UPDATE appointments 
+       SET status='cancelled', cancelled_by='doctor'
+       WHERE appointment_id=?`,
+      [appointment_id]
+    );
+
+    res.json({ message: "Appointment cancelled successfully" });
 
   } catch (err) {
     res.status(500).json({ error: err.message });

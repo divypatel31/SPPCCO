@@ -20,6 +20,30 @@ export default function DoctorAppointments() {
 
   const filtered = filter === 'all' ? appointments : appointments.filter(a => a.status === filter);
 
+  const cancelAppointment = async (id) => {
+    const confirmCancel = window.confirm("Cancel this appointment?");
+    if (!confirmCancel) return;
+
+    try {
+      const res = await api.put(`/doctor/cancel/${id}`);
+
+      toast.success(res.data.message || "Appointment cancelled");
+
+      // Immediately update UI instead of waiting for fetch
+      setAppointments(prev =>
+        prev.map(appt =>
+          appt.appointment_id === id
+            ? { ...appt, status: "cancelled" }
+            : appt
+        )
+      );
+
+    } catch (err) {
+      console.log(err.response?.data);
+      toast.error(err.response?.data?.message || "Cancel failed");
+    }
+  };
+
   if (loading) return <Spinner />;
 
   return (
@@ -31,9 +55,8 @@ export default function DoctorAppointments() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors ${
-              filter === f ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-            }`}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors ${filter === f ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
           >
             {f.replace(/_/g, ' ')} {f === 'all' && `(${appointments.length})`}
           </button>
@@ -60,7 +83,7 @@ export default function DoctorAppointments() {
               </thead>
               <tbody>
                 {filtered.map(appt => (
-                  <tr key={appt._id || appt.id}>
+                  <tr key={appt.appointment_id}>
                     <td className="font-medium">{appt.patient_name || '—'}</td>
                     <td>{appt.department || '—'}</td>
                     <td>{formatDate(appt.appointment_date || appt.date)}</td>
@@ -69,16 +92,27 @@ export default function DoctorAppointments() {
                     <td>
                       {['arrived', 'in_consultation'].includes(appt.status) && (
                         <Link
-                          to={`/doctor/consultation/${appt._id || appt.id}`}
+                          to={`/doctor/consultation/${appt.appointment_id}`}
                           className="inline-flex items-center gap-1 text-sm text-teal-600 hover:text-teal-800 font-medium"
                         >
                           <Stethoscope size={14} />
                           {appt.status === 'arrived' ? 'Start Consult' : 'Continue'}
                         </Link>
                       )}
+
                       {appt.status === 'completed' && (
                         <span className="text-gray-400 text-xs">Completed</span>
                       )}
+
+                      {appt.status === 'scheduled' && (
+                        <button
+                          onClick={() => cancelAppointment(appt.appointment_id)}
+                          className="btn-danger"
+                        >
+                          Cancel
+                        </button>
+                      )}
+
                     </td>
                   </tr>
                 ))}

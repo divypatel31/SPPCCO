@@ -9,10 +9,12 @@ router.use(auth);
 router.use(role("doctor"));
 
 router.get("/appointments", doctorController.getMyAppointments);
+router.get("/appointments/:id", doctorController.getAppointmentById);
 router.put("/start/:id", doctorController.startConsultation);
 router.post("/medical-record", doctorController.addMedicalRecord);
 router.post("/prescription", doctorController.addPrescription);
 router.post("/lab-request", doctorController.addLabRequest);
 router.put("/complete/:id", doctorController.completeConsultation);
+router.put("/cancel/:id", doctorController.cancelAppointment);
 
 module.exports = router;
