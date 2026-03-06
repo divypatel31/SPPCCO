@@ -46,5 +46,28 @@ router.get(
   pharmacyController.getTopSellingMedicines
 );
 
+router.get(
+  "/prescriptions",
+  authorizeRole("pharmacist"),
+  pharmacyController.getPendingPrescriptions
+);
+
+router.get(
+  "/prescriptions/:id",
+  authorizeRole("pharmacist"),
+  pharmacyController.getPrescriptionItems
+);
+
+router.get(
+  "/bills",
+  authorizeRole("pharmacist", "admin"),
+  pharmacyController.getPharmacyBills
+);
+
+router.put(
+  "/bills/:id/mark-paid",
+  authorizeRole("pharmacist", "admin"),
+  pharmacyController.markBillPaid
+);
 
 module.exports = router;

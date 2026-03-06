@@ -32,6 +32,7 @@ export default function ConsultationPage() {
       morning: false,
       afternoon: false,
       evening: false,
+      night: false,
       food_timing: '' // before_food or after_food
     }
   ]);
@@ -76,8 +77,10 @@ export default function ConsultationPage() {
     setSaving(true);
 
     try {
-      // Call correct backend route
-      await api.put(`/doctor/complete/${id}`);
+
+      await api.put(`/doctor/complete/${id}`, {
+        medicines
+      });
 
       toast.success('Consultation completed successfully!');
       navigate('/doctor/appointments');
@@ -132,6 +135,7 @@ export default function ConsultationPage() {
         morning: false,
         afternoon: false,
         evening: false,
+        night: false,
         food_timing: ''
       }
     ]);
@@ -173,14 +177,17 @@ export default function ConsultationPage() {
         <div className="flex items-center gap-3">
           <StatusBadge status={appt.status} />
 
-          {/* Show START if patient arrived */}
+          {/* START CONSULTATION */}
           {appt.status === 'arrived' && (
             <button
               onClick={async () => {
                 try {
                   await api.put(`/doctor/start/${id}`);
                   toast.success("Consultation started!");
-                  window.location.reload();
+
+                  // Update local state instead of reload
+                  setAppt(prev => ({ ...prev, status: 'in_consultation' }));
+
                 } catch (err) {
                   toast.error(err.response?.data?.message || "Failed to start");
                 }
@@ -191,7 +198,7 @@ export default function ConsultationPage() {
             </button>
           )}
 
-          {/* Show COMPLETE if consultation started */}
+          {/* COMPLETE CONSULTATION */}
           {appt.status === 'in_consultation' && (
             <button
               onClick={completeConsultation}
@@ -286,13 +293,19 @@ export default function ConsultationPage() {
                   onChange={e => updateMedicine(i, 'dosage', e.target.value)}
                 />
 
-                <input
-                  placeholder="Duration (e.g. 5 days)"
-                  className="input-field"
-                  disabled={isCompleted}
-                  value={med.duration}
-                  onChange={e => updateMedicine(i, 'duration', e.target.value)}
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="1"
+                    className="input-field"
+                    disabled={isCompleted}
+                    value={med.duration}
+                    onChange={e =>
+                      updateMedicine(i, "duration", e.target.value)
+                    }
+                  />
+                  <span>Days</span>
+                </div>
               </div>
 
               {/* Timing Checkboxes */}
@@ -331,6 +344,18 @@ export default function ConsultationPage() {
                     />
                     Evening
                   </label>
+
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      disabled={isCompleted}
+                      checked={med.night}
+                      onChange={e =>
+                        updateMedicine(i, "night", e.target.checked)
+                      }
+                    />
+                    Night
+                  </label>
                 </div>
               </div>
 
@@ -341,7 +366,7 @@ export default function ConsultationPage() {
                 value={med.food_timing}
                 onChange={e => updateMedicine(i, 'food_timing', e.target.value)}
               >
-                <option value="">Food Timing</option>
+                <option value="">Select Timing</option>
                 <option value="before_food">Before Food</option>
                 <option value="after_food">After Food</option>
               </select>

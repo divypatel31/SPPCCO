@@ -460,3 +460,24 @@ exports.registerWalkInPatient = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+exports.markArrived = async (req, res) => {
+  try {
+    const appointment_id = req.params.id;
+
+    const [result] = await db.query(
+      "UPDATE appointments SET status = 'arrived' WHERE appointment_id = ? AND status = 'scheduled'",
+      [appointment_id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(400).json({ message: "Only scheduled appointments can be marked arrived" });
+    }
+
+    res.json({ message: "Patient marked as arrived" });
+
+  } catch (error) {
+    console.error("ARRIVED ERROR:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};

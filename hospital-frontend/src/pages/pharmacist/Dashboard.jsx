@@ -12,19 +12,26 @@ export default function PharmacistDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [presRes, medRes] = await Promise.allSettled([
-          api.get('/pharmacy/medicine'),
-          api.get('/pharmacy/low-stock'),
-        ]);
-        if (presRes.status === 'fulfilled') setPrescriptions(presRes.value.data || []);
-        if (medRes.status === 'fulfilled') setMedicines(medRes.value.data || []);
-      } catch {}
-      finally { setLoading(false); }
-    };
-    fetchData();
-  }, []);
+  const fetchData = async () => {
+    try {
+      const [presRes, medRes] = await Promise.all([
+        api.get('/pharmacy/prescriptions'),   // ✅ correct
+        api.get('/pharmacy/medicine')         // ✅ correct
+      ]);
+
+      setPrescriptions(presRes.data || []);
+      setMedicines(medRes.data || []);
+
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load pharmacy data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchData();
+}, []);
 
   if (loading) return <Spinner />;
 

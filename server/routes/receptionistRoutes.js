@@ -35,6 +35,8 @@ router.get("/today-queue", receptionistController.getTodayQueue);
 
 router.post("/cancel-appointment", receptionistController.cancelAppointmentByReceptionist);
 
+router.put("/arrived/:id", receptionistController.markArrived);
+
 router.get(
   "/queue",
   verifyToken,

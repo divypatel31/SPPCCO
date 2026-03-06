@@ -119,15 +119,21 @@ exports.addPrescription = async (req, res) => {
     for (let med of medicines) {
       await db.execute(
         `INSERT INTO prescription_items
-         (prescription_id, medicine_name, dosage, frequency, duration, instructions)
-         VALUES (?,?,?,?,?,?)`,
+   (prescription_id, medicine_id, dosage, frequency, duration,
+    instructions, morning, afternoon, evening, night, food_timing)
+   VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
         [
           prescription_id,
-          med.medicine_name,
+          med.medicine_id,
           med.dosage,
           med.frequency,
           med.duration,
-          med.instructions
+          med.instructions,
+          med.morning || 0,
+          med.afternoon || 0,
+          med.evening || 0,
+          med.night || 0,
+          med.food_timing || null
         ]
       );
     }
@@ -172,9 +178,10 @@ exports.completeConsultation = async (req, res) => {
   try {
     const doctor_id = req.user.id;
     const appointment_id = req.params.id;
+    const { medicines } = req.body;
 
     const [rows] = await db.execute(
-      `SELECT status 
+      `SELECT status, patient_id 
        FROM appointments 
        WHERE appointment_id=? AND doctor_id=?`,
       [appointment_id, doctor_id]
@@ -184,12 +191,53 @@ exports.completeConsultation = async (req, res) => {
       return res.status(404).json({ message: "Appointment not found" });
     }
 
+    if (rows[0].status === "completed") {
+      return res.json({ message: "Already completed" });
+    }
+
     if (rows[0].status !== "in_consultation") {
       return res.status(400).json({
         message: "Consultation must be started first"
       });
     }
 
+    const patient_id = rows[0].patient_id;
+
+    // 🔹 Insert prescription if medicines exist
+    if (medicines && medicines.length > 0) {
+
+      const [result] = await db.execute(
+        `INSERT INTO prescriptions (appointment_id, doctor_id, patient_id)
+         VALUES (?,?,?)`,
+        [appointment_id, doctor_id, patient_id]
+      );
+
+      const prescription_id = result.insertId;
+
+      for (let med of medicines) {
+        await db.execute(
+          `INSERT INTO prescription_items
+          (prescription_id, medicine_id, dosage, frequency, duration,
+           instructions, morning, afternoon, evening, night, food_timing)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            prescription_id,
+            med.medicine_id,
+            med.dosage,
+            med.frequency || null,
+            med.duration ? Number(med.duration) : null,
+            med.instructions || null,
+            med.morning ? 1 : 0,
+            med.afternoon ? 1 : 0,
+            med.evening ? 1 : 0,
+            med.night ? 1 : 0,
+            med.food_timing || null
+          ]
+        );
+      }
+    }
+
+    // 🔹 Update appointment
     await db.execute(
       `UPDATE appointments 
        SET status='completed'
@@ -197,7 +245,7 @@ exports.completeConsultation = async (req, res) => {
       [appointment_id]
     );
 
-    res.json({ message: "Consultation completed" });
+    res.json({ message: "Consultation completed successfully" });
 
   } catch (err) {
     console.error("COMPLETE ERROR:", err);
@@ -211,7 +259,8 @@ exports.getAppointmentById = async (req, res) => {
     const doctor_id = req.user.id;
     const appointment_id = req.params.id;
 
-    const [rows] = await db.execute(
+    // 1️⃣ Get appointment
+    const [appointmentRows] = await db.execute(
       `SELECT a.*, u.full_name AS patient_name
        FROM appointments a
        JOIN users u ON a.patient_id = u.user_id
@@ -219,11 +268,27 @@ exports.getAppointmentById = async (req, res) => {
       [appointment_id, doctor_id]
     );
 
-    if (rows.length === 0) {
+    if (appointmentRows.length === 0) {
       return res.status(404).json({ message: "Appointment not found" });
     }
 
-    res.json(rows[0]);
+    const appointment = appointmentRows[0];
+
+    // 2️⃣ Get lab results
+    const [labResults] = await db.execute(
+      `SELECT lr.request_id,
+              lr.test_name,
+              lr.status,
+              lr.result
+       FROM lab_requests lr
+       WHERE lr.appointment_id=?`,
+      [appointment_id]
+    );
+
+    // 3️⃣ Attach lab results
+    appointment.lab_results = labResults;
+
+    res.json(appointment);
 
   } catch (err) {
     res.status(500).json({ error: err.message });

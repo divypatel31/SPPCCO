@@ -3,7 +3,7 @@ import { PageHeader, Spinner, EmptyState } from '../../components/common';
 import { formatDate, formatTime } from '../../utils/helpers';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Calendar, X } from 'lucide-react';
+import { Calendar, X, UserCheck } from 'lucide-react';
 
 export default function TodayQueue() {
   const [date, setDate] = useState(
@@ -42,6 +42,15 @@ export default function TodayQueue() {
     }
   };
 
+  const handleArrived = async (id) => {
+    try {
+      await api.put(`/receptionist/arrived/${id}`);
+      toast.success("Patient marked as arrived");
+      fetchQueue();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to update");
+    }
+  };
   if (loading) return <Spinner />;
 
   return (
@@ -94,11 +103,10 @@ export default function TodayQueue() {
                         : <span className="text-gray-400">Not Assigned</span>
                       }
                     </td>
-
                     {/* STATUS */}
                     <td>
                       {appt.status === 'cancelled' ? (
-                        <span className="text-red-600 font-medium">
+                        <span className="text-red-600 font-semibold">
                           Cancelled {appt.cancelled_by === 'patient'
                             ? 'by Patient'
                             : appt.cancelled_by === 'receptionist'
@@ -107,16 +115,54 @@ export default function TodayQueue() {
                                 ? 'by Doctor'
                                 : ''}
                         </span>
+
+                      ) : appt.status === 'pending' ? (
+                        <span className="text-yellow-600 font-medium">
+                          Pending Approval
+                        </span>
+
+                      ) : appt.status === 'scheduled' ? (
+                        <span className="text-blue-600 font-medium">
+                          Scheduled
+                        </span>
+
+                      ) : appt.status === 'arrived' ? (
+                        <span className="text-indigo-600 font-medium">
+                          Arrived
+                        </span>
+
+                      ) : appt.status === 'in_consultation' ? (
+                        <span className="text-purple-600 font-medium">
+                          In Consultation
+                        </span>
+
+                      ) : appt.status === 'completed' ? (
+                        <span className="text-green-600 font-medium">
+                          Completed
+                        </span>
+
                       ) : (
-                        <span className="text-green-600 font-medium capitalize">
+                        <span className="text-gray-500 capitalize">
                           {appt.status}
                         </span>
                       )}
                     </td>
 
                     {/* ACTION */}
-                    <td>
-                      {appt.status !== 'cancelled' && (
+                    <td className="flex gap-2">
+
+                      {/* ARRIVED BUTTON */}
+                      {appt.status === 'scheduled' && (
+                        <button
+                          onClick={() => handleArrived(appt.appointment_id)}
+                          className="text-blue-600 hover:text-blue-800 text-xs flex items-center gap-1"
+                        >
+                          <UserCheck size={12} /> Arrived
+                        </button>
+                      )}
+
+                      {/* CANCEL BUTTON */}
+                      {appt.status !== 'cancelled' && appt.status !== 'completed' && (
                         <button
                           onClick={() => handleCancel(appt.appointment_id)}
                           className="text-red-600 hover:text-red-800 text-xs flex items-center gap-1"
@@ -124,6 +170,7 @@ export default function TodayQueue() {
                           <X size={12} /> Cancel
                         </button>
                       )}
+
                     </td>
                   </tr>
                 ))}

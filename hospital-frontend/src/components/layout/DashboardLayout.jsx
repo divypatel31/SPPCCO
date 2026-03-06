@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Calendar, User, FileText, CreditCard,
   Users, Settings, LogOut, Menu, X, FlaskConical,
   Stethoscope, Activity, Package, TrendingUp, ClipboardList,
-  UserPlus, Clock, Pill, Building2, BarChart3, Bell
+  UserPlus, Clock, Pill, Building2, BarChart3, Bell, Phone
 } from 'lucide-react';
 
 const NAV_ITEMS = {
@@ -16,10 +16,13 @@ const NAV_ITEMS = {
     { to: '/patient/prescriptions', icon: Pill, label: 'Prescriptions' },
     { to: '/patient/bills', icon: CreditCard, label: 'My Bills' },
     { to: '/patient/profile', icon: User, label: 'Profile' },
+    { to: '/patient/contact', icon: Phone, label: 'Contact' },
   ],
   doctor: [
     { to: '/doctor/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/doctor/appointments', icon: Calendar, label: 'Appointments' },
+    { to: '/doctor/profile', icon: User, label: 'Profile' },
+    { to: '/doctor/contact', icon: Phone, label: 'Contact' },
   ],
   receptionist: [
     { to: '/receptionist/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -27,15 +30,21 @@ const NAV_ITEMS = {
     { to: '/receptionist/queue', icon: Users, label: "Appointment" },
     { to: '/receptionist/billing', icon: CreditCard, label: 'Billing' },
     { to: '/receptionist/register-patient', icon: UserPlus, label: 'Register Patient' },
+    { to: '/receptionist/profile', icon: User, label: 'Profile' },
+    { to: '/receptionist/contact', icon: Phone, label: 'Contact' },
   ],
   lab: [
     { to: '/lab/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/lab/requests', icon: FlaskConical, label: 'Lab Requests' },
+    { to: '/lab/profile', icon: User, label: 'Profile' },
+    { to: '/lab/contact', icon: Phone, label: 'Contact' },
   ],
   pharmacist: [
     { to: '/pharmacist/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/pharmacist/prescriptions', icon: Pill, label: 'Prescriptions' },
     { to: '/pharmacist/bills', icon: CreditCard, label: 'Pharmacy Bills' },
+    { to: '/pharmacist/profile', icon: User, label: 'Profile' },
+    { to: '/pharmacist/contact', icon: Phone, label: 'Contact' },
   ],
   admin: [
     { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -45,6 +54,8 @@ const NAV_ITEMS = {
     { to: '/admin/medicines', icon: Package, label: 'Medicine Master' },
     { to: '/admin/revenue', icon: TrendingUp, label: 'Revenue Analytics' },
     { to: '/admin/system-settings', icon: Settings, label: 'Settings' },
+    { to: '/admin/profile', icon: User, label: 'Profile' },
+    { to: '/admin/contact', icon: Phone, label: 'Contact' },
   ],
 };
 

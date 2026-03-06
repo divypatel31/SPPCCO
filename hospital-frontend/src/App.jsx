@@ -48,12 +48,18 @@ import SystemSettings from "./pages/admin/SystemSettings";
 // Layout
 import DashboardLayout from './components/layout/DashboardLayout';
 
+// Common Pages (Available to multiple roles)
+import StaffProfile from './pages/common/StaffProfile';
+import Contact from './pages/common/Contact';
+
 // Protected Route component
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div className="flex items-center justify-center h-screen">
-    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-  </div>;
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    </div>
+  );
   if (!user) return <Navigate to="/login" replace />;
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to="/unauthorized" replace />;
@@ -86,6 +92,7 @@ function App() {
           <Route path="/" element={<RoleRedirect />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          
           <Route path="/unauthorized" element={
             <div className="flex items-center justify-center h-screen">
               <div className="text-center">
@@ -107,6 +114,7 @@ function App() {
             <Route path="appointments" element={<MyAppointments />} />
             <Route path="bills" element={<MyBills />} />
             <Route path="prescriptions" element={<MyPrescriptions />} />
+            <Route path="contact" element={<Contact />} /> {/* Fixed syntax */}
           </Route>
 
           {/* Doctor Routes */}
@@ -118,6 +126,8 @@ function App() {
             <Route path="dashboard" element={<DoctorDashboard />} />
             <Route path="appointments" element={<DoctorAppointments />} />
             <Route path="consultation/:id" element={<ConsultationPage />} />
+            <Route path="profile" element={<StaffProfile />} /> {/* Fixed syntax */}
+            <Route path="contact" element={<Contact />} /> {/* Added */}
           </Route>
 
           {/* Receptionist Routes */}
@@ -131,6 +141,8 @@ function App() {
             <Route path="queue" element={<TodayQueue />} />
             <Route path="billing" element={<BillingPage />} />
             <Route path="register-patient" element={<RegisterPatient />} />
+            <Route path="profile" element={<StaffProfile />} /> {/* Added */}
+            <Route path="contact" element={<Contact />} /> {/* Added */}
           </Route>
 
           {/* Lab Routes */}
@@ -141,6 +153,8 @@ function App() {
           }>
             <Route path="dashboard" element={<LabDashboard />} />
             <Route path="requests" element={<LabRequests />} />
+            <Route path="profile" element={<StaffProfile />} /> {/* Added */}
+            <Route path="contact" element={<Contact />} /> {/* Added */}
           </Route>
 
           {/* Pharmacist Routes */}
@@ -152,6 +166,8 @@ function App() {
             <Route path="dashboard" element={<PharmacistDashboard />} />
             <Route path="prescriptions" element={<Prescriptions />} />
             <Route path="bills" element={<PharmacyBills />} />
+            <Route path="profile" element={<StaffProfile />} /> {/* Added */}
+            <Route path="contact" element={<Contact />} /> {/* Added */}
           </Route>
 
           {/* Admin Routes */}
@@ -167,6 +183,8 @@ function App() {
             <Route path="medicines" element={<MedicineManagement />} />
             <Route path="revenue" element={<RevenueAnalytics />} />
             <Route path="system-settings" element={<SystemSettings />} />
+            <Route path="profile" element={<StaffProfile />} /> {/* Fixed syntax */}
+            <Route path="contact" element={<Contact />} /> {/* Fixed syntax */}
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
