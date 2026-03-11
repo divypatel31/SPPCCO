@@ -91,119 +91,114 @@ exports.updateMedicine = async (req, res) => {
 
 
 exports.sellMedicines = async (req, res) => {
-  // total_amount is removed from req.body because we calculate it dynamically
   const { prescription_id, medicines } = req.body;
-
   const conn = await db.getConnection();
 
   try {
     await conn.beginTransaction();
 
-    // 1️⃣ Validations
-    if (!prescription_id) {
-      throw new Error("Prescription ID is required");
-    }
-
+    if (!prescription_id) throw new Error("Prescription ID is required");
     if (!medicines || !Array.isArray(medicines) || medicines.length === 0) {
       throw new Error("No medicines provided");
     }
 
-    // 2️⃣ Get patient_id & appointment_id properly using JOIN (From Code 2)
+    // 1️⃣ Get patient info
     const [rows] = await conn.execute(`
-      SELECT 
-        a.patient_id,
-        a.appointment_id
+      SELECT a.patient_id, a.appointment_id
       FROM prescriptions p
       JOIN appointments a ON p.appointment_id = a.appointment_id
       WHERE p.prescription_id = ?
     `, [prescription_id]);
 
-    if (rows.length === 0) {
-      throw new Error("Prescription not found");
-    }
-
+    if (rows.length === 0) throw new Error("Prescription not found");
+    
     const patient_id = rows[0].patient_id;
     const appointment_id = rows[0].appointment_id;
-    const generated_by = req.user.id; // pharmacist id
+    const generated_by = req.user.id;
 
-    // 3️⃣ Insert initial bill with 0 total (Will update later)
-    const [billResult] = await conn.execute(`
-      INSERT INTO bills 
-      (appointment_id, patient_id, bill_type, generated_by, total_amount, payment_status)
-      VALUES (?, ?, 'pharmacy', ?, 0, 'unpaid')
-    `, [appointment_id, patient_id, generated_by]);
-
-    const bill_id = billResult.insertId;
+    // 2️⃣ Pre-calculate total amount to check wallet FIRST
     let finalTotal = 0;
+    const dispenseItems = []; // Temporarily store items until we confirm wallet balance
 
-    // 4️⃣ Smart Dispense Logic (From Code 1)
     for (let med of medicines) {
       const requestedQty = Number(med.quantity_dispensed ?? med.quantity_required) || 0;
+      if (!med.medicine_id || requestedQty <= 0) continue;
 
-      if (!med.medicine_id || requestedQty <= 0) {
-        continue; // Skip invalid medicine entries safely
-      }
-
-      // Fetch current stock and actual price from the database to prevent frontend tampering
       const [stockRows] = await conn.execute(
         `SELECT stock, price FROM medicines WHERE medicine_id = ?`,
         [med.medicine_id]
       );
 
-      if (stockRows.length === 0) continue; // Medicine not found in DB
+      if (stockRows.length === 0) continue;
 
       const stock = Number(stockRows[0].stock);
       const price = Number(stockRows[0].price);
-
-      // ✅ Smart dispense: Dispense requested quantity OR whatever is left in stock
+      
       const dispenseQty = Math.min(requestedQty, stock);
+      if (dispenseQty <= 0) continue;
 
-      if (dispenseQty <= 0) continue; // Out of stock, skip dispensing this item
+      finalTotal += (dispenseQty * price);
+      dispenseItems.push({ medicine_id: med.medicine_id, dispenseQty, price });
+    }
 
-      // Insert bill item using the dynamically checked dispenseQty and DB price
+    if (finalTotal === 0) {
+      throw new Error("No medicines could be dispensed (out of stock or invalid data).");
+    }
+
+    // 3️⃣ Check wallet balance BEFORE creating the bill
+    const [patientRows] = await conn.execute(
+      "SELECT wallet_balance FROM users WHERE user_id = ? FOR UPDATE",
+      [patient_id]
+    );
+
+    if (patientRows[0].wallet_balance < finalTotal) {
+      throw new Error(`Insufficient wallet balance. Total pharmacy bill is ₹${finalTotal}, but patient has ₹${patientRows[0].wallet_balance}. Ask patient to top up.`);
+    }
+
+    // 4️⃣ Deduct money from wallet
+    await conn.execute(
+      "UPDATE users SET wallet_balance = wallet_balance - ? WHERE user_id = ?",
+      [finalTotal, patient_id]
+    );
+
+    // 5️⃣ Create the bill (Marked as PAID immediately since wallet was charged)
+    const [billResult] = await conn.execute(`
+      INSERT INTO bills 
+      (appointment_id, patient_id, bill_type, generated_by, total_amount, payment_status, paid_at)
+      VALUES (?, ?, 'pharmacy', ?, ?, 'paid', NOW())
+    `, [appointment_id, patient_id, generated_by, finalTotal]);
+
+    const bill_id = billResult.insertId;
+
+    // 6️⃣ Insert items and update stock securely
+    for (let item of dispenseItems) {
       await conn.execute(`
         INSERT INTO bill_items (bill_id, medicine_id, quantity, price)
         VALUES (?, ?, ?, ?)
-      `, [bill_id, med.medicine_id, dispenseQty, price]);
+      `, [bill_id, item.medicine_id, item.dispenseQty, item.price]);
 
-      // Update stock
       await conn.execute(`
-        UPDATE medicines
-        SET stock = stock - ?
-        WHERE medicine_id = ?
-      `, [dispenseQty, med.medicine_id]);
-
-      // Calculate running total
-      finalTotal += (dispenseQty * price);
+        UPDATE medicines SET stock = stock - ? WHERE medicine_id = ?
+      `, [item.dispenseQty, item.medicine_id]);
     }
 
-    // 5️⃣ Update total bill amount with the calculated finalTotal
+    // 7️⃣ Update appointment
     await conn.execute(`
-      UPDATE bills
-      SET total_amount = ?
-      WHERE bill_id = ?
-    `, [finalTotal, bill_id]);
-
-    // 6️⃣ Update appointment status
-    await conn.execute(`
-      UPDATE appointments
-      SET status = 'completed'
-      WHERE appointment_id = ?
+      UPDATE appointments SET status = 'completed' WHERE appointment_id = ?
     `, [appointment_id]);
 
     await conn.commit();
 
     res.json({
-      message: "Pharmacy bill generated successfully",
+      message: `Medicines dispensed successfully. ₹${finalTotal} automatically deducted from patient's wallet.`,
       bill_id: bill_id,
-      total_amount: finalTotal,
-      notes: "Stock adjusted based on availability."
+      total_amount: finalTotal
     });
 
   } catch (err) {
     await conn.rollback();
-    console.error("SELL MEDICINES ERROR:", err);
-    res.status(500).json({ message: err.message });
+    console.error("SELL ERROR:", err);
+    res.status(400).json({ message: err.message || "Failed to dispense medicines" });
   } finally {
     conn.release();
   }
@@ -258,22 +253,19 @@ exports.getPendingPrescriptions = async (req, res) => {
       SELECT 
         p.prescription_id,
         p.appointment_id,
+        a.patient_id,
         u.full_name AS patient_name,
         d.full_name AS doctor_name,
-        p.created_at
+        p.created_at,
+        (SELECT COUNT(*) FROM prescription_items WHERE prescription_id = p.prescription_id) AS item_count
       FROM prescriptions p
-      JOIN appointments a 
-        ON p.appointment_id = a.appointment_id
-      JOIN users u 
-        ON a.patient_id = u.user_id
-      JOIN users d 
-        ON a.doctor_id = d.user_id
-      LEFT JOIN bills b 
-        ON b.appointment_id = a.appointment_id
-        AND b.bill_type = 'pharmacy'
-      WHERE 
-        a.status = 'completed'
+      JOIN appointments a ON p.appointment_id = a.appointment_id
+      JOIN users u ON a.patient_id = u.user_id
+      JOIN users d ON a.doctor_id = d.user_id
+      LEFT JOIN bills b ON b.appointment_id = a.appointment_id AND b.bill_type = 'pharmacy'
+      WHERE a.status = 'completed' 
         AND b.bill_id IS NULL
+      HAVING item_count > 0 
       ORDER BY p.created_at DESC
     `);
 
@@ -281,6 +273,27 @@ exports.getPendingPrescriptions = async (req, res) => {
   } catch (err) {
     console.error("GET PENDING PRESCRIPTIONS ERROR:", err);
     res.status(500).json({ message: err.message });
+  }
+};
+
+exports.cancelPrescription = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 🔥 FIXED: Since there is no 'status' column, we simply delete the prescription 
+    // if the patient never showed up. This keeps the database clean.
+    
+    // First, delete the items to prevent foreign key constraint errors
+    await db.execute("DELETE FROM prescription_items WHERE prescription_id = ?", [id]);
+    
+    // Then, delete the prescription itself
+    await db.execute("DELETE FROM prescriptions WHERE prescription_id = ?", [id]);
+    
+    res.json({ message: "Prescription successfully removed due to no-show." });
+    
+  } catch (error) {
+    console.error("CANCEL ERROR:", error);
+    res.status(500).json({ error: error.message });
   }
 };
 

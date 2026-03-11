@@ -6,7 +6,6 @@ const SystemSettings = () => {
   const [form, setForm] = useState({
     consultation_fee: 0,
     tax_percent: 0,
-    discount_percent: 0,
   });
 
   const [loading, setLoading] = useState(false);
@@ -18,11 +17,11 @@ const SystemSettings = () => {
 
   const fetchSettings = async () => {
     try {
-      const res = await api.get("/admin/profile");
+      // Temporarily grabbing from profile if needed, or initializing to 0
+      const res = await api.get("/admin/profile").catch(() => ({ data: {} }));
       setForm({
         consultation_fee: res.data.consultation_fee || 0,
         tax_percent: res.data.tax_percent || 0,
-        discount_percent: res.data.discount_percent || 0,
       });
     } catch (err) {
       console.error(err);
@@ -39,7 +38,8 @@ const SystemSettings = () => {
     setSuccess(false);
 
     try {
-      await api.put("/admin/system-settings", form);
+      // 🔥 FIXED API ROUTE: Points to the actual route in your adminRoutes.js
+      await api.put("/admin/consultation-fee", form);
       setSuccess(true);
     } catch (err) {
       console.error(err);
@@ -51,9 +51,7 @@ const SystemSettings = () => {
   // Live Preview Calculation
   const subtotal = Number(form.consultation_fee);
   const taxAmount = (subtotal * Number(form.tax_percent)) / 100;
-  const discountAmount =
-    (subtotal * Number(form.discount_percent)) / 100;
-  const finalTotal = subtotal + taxAmount - discountAmount;
+  const finalTotal = subtotal + taxAmount;
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
@@ -107,35 +105,12 @@ const SystemSettings = () => {
             </div>
           </div>
 
-          {/* Discount */}
-          <div>
-            <label className="font-semibold mb-2 block">
-              Default Discount %
-            </label>
-            <div className="flex border rounded-lg overflow-hidden">
-              <span className="bg-gray-200 px-4 py-2">
-                <Percent size={18} />
-              </span>
-              <input
-                type="number"
-                name="discount_percent"
-                value={form.discount_percent}
-                onChange={handleChange}
-                className="w-full p-2 outline-none"
-              />
-            </div>
-          </div>
-
           {/* Live Preview */}
-          <div className="bg-gray-100 p-6 rounded-xl">
+          <div className="bg-gray-100 p-6 rounded-xl md:col-span-2">
             <h3 className="font-semibold mb-4">Live Billing Preview</h3>
-
             <p>Consultation: ₹{subtotal}</p>
             <p>Tax ({form.tax_percent}%): ₹{taxAmount.toFixed(2)}</p>
-            <p>Discount ({form.discount_percent}%): ₹{discountAmount.toFixed(2)}</p>
-
             <hr className="my-3" />
-
             <p className="font-bold text-lg">
               Final Total: ₹{finalTotal.toFixed(2)}
             </p>
@@ -149,7 +124,7 @@ const SystemSettings = () => {
               className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl transition flex items-center gap-2"
             >
               <Save size={18} />
-              {loading ? "Saving..." : "Save All Settings"}
+              {loading ? "Saving..." : "Save Settings"}
             </button>
 
             {success && (
@@ -159,7 +134,6 @@ const SystemSettings = () => {
             )}
           </div>
         </form>
-
       </div>
     </div>
   );

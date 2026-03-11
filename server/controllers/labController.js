@@ -1,8 +1,34 @@
 const db = require("../config/db");
 
+/* 🔥 NEW: Get Pending Lab Groups (Grouped by Patient/Appointment)
+  This solves the "Empty Pending List" issue by matching 'requested' status
+*/
+exports.getPendingTests = async (req, res) => {
+  try {
+    const [rows] = await db.execute(`
+      SELECT 
+        lr.appointment_id,
+        u.full_name AS patient_name,
+        u.user_id AS patient_id,
+        COUNT(lr.request_id) AS total_tests,
+        MIN(lr.created_at) AS requested_at
+      FROM lab_requests lr
+      JOIN users u ON lr.patient_id = u.user_id
+      WHERE lr.status = 'requested' 
+      GROUP BY lr.appointment_id, u.full_name, u.user_id
+      ORDER BY requested_at ASC
+    `);
+
+    res.json(rows);
+  } catch (error) {
+    console.error("PENDING FETCH ERROR:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
 /*
-GET /api/lab/requests
-View all lab requests
+  GET /api/lab/requests
+  View all lab requests (History)
 */
 exports.getLabRequests = async (req, res) => {
   try {
@@ -25,15 +51,14 @@ exports.getLabRequests = async (req, res) => {
   }
 };
 
-
 /*
-PUT /api/lab/complete/:id
-Mark lab test completed
+  PUT /api/lab/complete/:id
+  Mark lab test completed
 */
 exports.completeLabTest = async (req, res) => {
   try {
     const { id } = req.params;
-    const { result, status } = req.body;
+    const { result } = req.body;
 
     const [rows] = await db.execute(
       "SELECT * FROM lab_requests WHERE request_id = ?",
@@ -48,7 +73,7 @@ exports.completeLabTest = async (req, res) => {
       return res.status(400).json({ message: "Already completed" });
     }
 
-    // If result exists → complete automatically
+    // 🔥 FIXED: Removed 'updated_at' to prevent the 500 error
     if (result && result.trim() !== "") {
       await db.execute(
         `UPDATE lab_requests
@@ -62,7 +87,7 @@ exports.completeLabTest = async (req, res) => {
       return res.json({ message: "Lab test completed successfully" });
     }
 
-    // If no result → just mark in progress
+    // If no result yet, just mark it as in progress
     await db.execute(
       `UPDATE lab_requests
        SET status = 'in_progress'
@@ -70,7 +95,7 @@ exports.completeLabTest = async (req, res) => {
       [id]
     );
 
-    res.json({ message: "Progress saved" });
+    res.json({ message: "Test marked as in progress" });
 
   } catch (error) {
     console.error("COMPLETE ERROR:", error);

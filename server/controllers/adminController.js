@@ -2,75 +2,112 @@ const db = require("../config/db");
 
 exports.getDashboardStats = async (req, res) => {
     try {
+        // 🔥 NEW: Fetch dynamic fee
+        const [adminRows] = await db.execute("SELECT consultation_fee FROM users WHERE role = 'admin' LIMIT 1");
+        const adminFee = Number(adminRows[0]?.consultation_fee) || 0;
 
-        const [patients] = await db.execute(
-            "SELECT COUNT(*) AS total_patients FROM users WHERE role = 'patient'"
-        );
+        // 1. Get User Counts
+        const [users] = await db.execute("SELECT role, COUNT(*) as count FROM users GROUP BY role");
+        let total_patients = 0, total_doctors = 0, total_receptionists = 0, total_lab_techs = 0, total_pharmacists = 0;
+        
+        users.forEach(u => {
+            if(u.role === 'patient') total_patients = u.count;
+            if(u.role === 'doctor') total_doctors = u.count;
+            if(u.role === 'receptionist') total_receptionists = u.count;
+            if(u.role === 'lab') total_lab_techs = u.count;
+            if(u.role === 'pharmacist') total_pharmacists = u.count;
+        });
 
-        const [doctors] = await db.execute(
-            "SELECT COUNT(*) AS total_doctors FROM users WHERE role = 'doctor'"
-        );
+        const [appointments] = await db.execute("SELECT COUNT(*) AS total_appointments FROM appointments");
 
-        const [receptionists] = await db.execute(
-            "SELECT COUNT(*) AS total_receptionists FROM users WHERE role = 'receptionist'"
-        );
+        // 2. Calculate Revenue based on Wallet Deductions
+        const [pharmacy] = await db.execute("SELECT SUM(total_amount) AS total FROM bills WHERE payment_status = 'paid'");
+        const pharmacy_revenue = parseFloat(pharmacy[0].total) || 0;
 
-        const [labTechs] = await db.execute(
-            "SELECT COUNT(*) AS total_lab_techs FROM users WHERE role = 'lab'"
-        );
+        // 🔥 USE DYNAMIC FEE
+        const [consultations] = await db.execute("SELECT COUNT(*) as count FROM appointments WHERE status IN ('arrived', 'in_consultation', 'completed')");
+        const consultation_revenue = (consultations[0].count || 0) * adminFee; 
 
-        const [pharmacists] = await db.execute(
-            "SELECT COUNT(*) AS total_pharmacists FROM users WHERE role = 'pharmacist'"
-        );
+        const [labs] = await db.execute("SELECT SUM(test_price) as total FROM lab_requests");
+        const lab_revenue = parseFloat(labs[0].total) || 0;
 
-        const [appointments] = await db.execute(
-            "SELECT COUNT(*) AS total_appointments FROM appointments"
-        );
+        const total_revenue = pharmacy_revenue + consultation_revenue + lab_revenue;
 
-        const [revenue] = await db.execute(
-            "SELECT SUM(total_amount) AS total_revenue FROM bills WHERE payment_status = 'paid'"
-        );
+        // 3. Bill Counts
+        const [paidBills] = await db.execute("SELECT COUNT(*) AS count FROM bills WHERE payment_status = 'paid'");
+        const [pendingBills] = await db.execute("SELECT COUNT(*) AS count FROM bills WHERE payment_status = 'unpaid' OR payment_status = 'pending'");
 
-        const [unpaid] = await db.execute(
-            "SELECT COUNT(*) AS pending_bills FROM bills WHERE payment_status = 'unpaid'"
-        );
+        // 4. Today & Monthly Totals
+        const [todayPharmacy] = await db.execute("SELECT SUM(total_amount) AS total FROM bills WHERE payment_status = 'paid' AND DATE(paid_at) = CURDATE()");
+        const [todayConsultations] = await db.execute("SELECT COUNT(*) as count FROM appointments WHERE status IN ('arrived', 'in_consultation', 'completed') AND DATE(appointment_date) = CURDATE()");
+        const [todayLabs] = await db.execute("SELECT SUM(test_price) as total FROM lab_requests WHERE DATE(created_at) = CURDATE()");
+        
+        // 🔥 USE DYNAMIC FEE
+        const today_revenue = (parseFloat(todayPharmacy[0].total) || 0) + ((todayConsultations[0].count || 0) * adminFee) + (parseFloat(todayLabs[0].total) || 0);
+
+        const [monthPharmacy] = await db.execute("SELECT SUM(total_amount) AS total FROM bills WHERE payment_status = 'paid' AND MONTH(paid_at) = MONTH(CURDATE())");
+        const [monthConsultations] = await db.execute("SELECT COUNT(*) as count FROM appointments WHERE status IN ('arrived', 'in_consultation', 'completed') AND MONTH(appointment_date) = MONTH(CURDATE())");
+        const [monthLabs] = await db.execute("SELECT SUM(test_price) as total FROM lab_requests WHERE MONTH(created_at) = MONTH(CURDATE())");
+
+        // 🔥 USE DYNAMIC FEE
+        const monthly_revenue = (parseFloat(monthPharmacy[0].total) || 0) + ((monthConsultations[0].count || 0) * adminFee) + (parseFloat(monthLabs[0].total) || 0);
 
         res.json({
-            total_patients: patients[0].total_patients,
-            total_doctors: doctors[0].total_doctors,
-            total_receptionists: receptionists[0].total_receptionists,
-            total_lab_techs: labTechs[0].total_lab_techs,
-            total_pharmacists: pharmacists[0].total_pharmacists,
+            total_patients, total_doctors, total_receptionists, total_lab_techs, total_pharmacists,
             total_appointments: appointments[0].total_appointments,
-            total_revenue: parseFloat(revenue[0].total_revenue) || 0,
-            pending_bills: unpaid[0].pending_bills
+            total_revenue,
+            consultation_revenue,
+            lab_revenue,
+            pharmacy_revenue,
+            paid_bills_count: paidBills[0].count,
+            pending_bills: pendingBills[0].count,
+            today_revenue,
+            monthly_revenue
         });
 
     } catch (error) {
+        console.error("DASHBOARD STATS ERROR:", error);
         res.status(500).json({ error: error.message });
     }
 };
 
-
 exports.getMonthlyRevenue = async (req, res) => {
     try {
+        // 🔥 NEW: Fetch dynamic fee
+        const [adminRows] = await db.execute("SELECT consultation_fee FROM users WHERE role = 'admin' LIMIT 1");
+        const adminFee = Number(adminRows[0]?.consultation_fee) || 0;
+
         const [rows] = await db.execute(`
-      SELECT 
-        DATE_FORMAT(created_at, '%Y-%m') AS month,
-        SUM(total_amount) AS total
-      FROM bills
-      WHERE payment_status = 'paid'
-      GROUP BY month
-      ORDER BY month ASC
-    `);
+            SELECT 
+                month, 
+                SUM(consultation_revenue) as consultation_revenue, 
+                SUM(lab_revenue) as lab_revenue, 
+                SUM(pharmacy_revenue) as pharmacy_revenue
+            FROM (
+                SELECT DATE_FORMAT(appointment_date, '%b') as month, ? as consultation_revenue, 0 as lab_revenue, 0 as pharmacy_revenue 
+                FROM appointments WHERE status IN ('arrived', 'in_consultation', 'completed')
+                
+                UNION ALL
+                
+                SELECT DATE_FORMAT(created_at, '%b') as month, 0, test_price, 0 
+                FROM lab_requests
+                
+                UNION ALL
+                
+                SELECT DATE_FORMAT(paid_at, '%b') as month, 0, 0, total_amount 
+                FROM bills WHERE payment_status = 'paid'
+            ) as combined
+            GROUP BY month
+            ORDER BY month DESC
+            LIMIT 6
+        `, [adminFee]); // 🔥 PASS DYNAMIC FEE INTO SQL QUERY
 
-        res.json(
-            rows.map(r => ({
-                month: r.month,
-                total: parseFloat(r.total)
-            }))
-        );
-
+        res.json(rows.map(r => ({
+            month: r.month,
+            consultation_revenue: parseFloat(r.consultation_revenue) || 0,
+            lab_revenue: parseFloat(r.lab_revenue) || 0,
+            pharmacy_revenue: parseFloat(r.pharmacy_revenue) || 0
+        })).reverse());
 
     } catch (error) {
         res.status(500).json({ error: error.message });

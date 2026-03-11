@@ -17,6 +17,7 @@ const labRequestRoutes = require("./routes/labRequestRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const pharmacyRoutes = require("./routes/pharmacyRoutes");
 const departmentRoutes = require("./routes/departmentRoutes");
+const reportRoutes = require("./routes/reportRoutes");
 
 const app = express();
 
@@ -43,6 +44,7 @@ app.use("/api/lab-request", labRequestRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/pharmacy", pharmacyRoutes);
 app.use("/api/departments", departmentRoutes);
+app.use("/api/reports", reportRoutes);
 
 /* Root Test */
 app.get("/", (req, res) => {

@@ -1,44 +1,69 @@
 const db = require("../config/db");
 
 /* =========================
-   CREATE LAB REQUEST (Doctor)
+   CREATE LAB REQUEST & DEDUCT WALLET (Doctor)
 ========================= */
 exports.createLabRequest = async (req, res) => {
+    const conn = await db.getConnection();
+
     try {
+        await conn.beginTransaction();
+
         const doctorId = req.user.id;
         const { appointment_id, test_name, department, test_price } = req.body;
 
         if (!appointment_id || !test_name || !test_price) {
-            return res.status(400).json({ message: "Missing required fields" });
+            throw new Error("Missing required fields");
         }
 
-        // Get patient_id from appointment
-        const [appointment] = await db.execute(
+        // 1. Get patient_id from appointment
+        const [appointment] = await conn.execute(
             "SELECT patient_id FROM appointments WHERE appointment_id = ?",
             [appointment_id]
         );
 
         if (appointment.length === 0) {
-            return res.status(400).json({ message: "Invalid appointment" });
+            throw new Error("Invalid appointment");
         }
 
         const patient_id = appointment[0].patient_id;
+        const labFee = Number(test_price);
 
-        await db.execute(
+        // 2. Check Patient Wallet Balance
+        const [patientRows] = await conn.execute(
+            "SELECT wallet_balance FROM users WHERE user_id=? FOR UPDATE",
+            [patient_id]
+        );
+
+        if (patientRows[0].wallet_balance < labFee) {
+            throw new Error(`Insufficient wallet balance. ₹${labFee} required for ${test_name}. Ask patient to top up.`);
+        }
+
+        // 3. Deduct the Lab Fee from the wallet
+        await conn.execute(
+            "UPDATE users SET wallet_balance = wallet_balance - ? WHERE user_id=?",
+            [labFee, patient_id]
+        );
+
+        // 4. Insert Lab Request
+        await conn.execute(
             `INSERT INTO lab_requests
              (appointment_id, patient_id, doctor_id, test_name, department, test_price)
              VALUES (?, ?, ?, ?, ?, ?)`,
-            [appointment_id, patient_id, doctorId, test_name, department || null, test_price]
+            [appointment_id, patient_id, doctorId, test_name, department || null, labFee]
         );
 
-        res.status(201).json({ message: "Lab request created successfully" });
+        await conn.commit();
+        res.status(201).json({ message: `Lab request sent. ₹${labFee} deducted from patient wallet.` });
 
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: error.message });
+        await conn.rollback();
+        console.error("LAB REQUEST ERROR:", error);
+        res.status(400).json({ message: error.message || "Server error" });
+    } finally {
+        conn.release();
     }
 };
-
 
 /* =========================
    GET LAB REQUESTS (Lab)

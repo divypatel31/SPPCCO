@@ -70,4 +70,7 @@ router.put(
   pharmacyController.markBillPaid
 );
 
+// Add this with your other routes
+router.put("/cancel/:id", authorizeRole("pharmacy"), pharmacyController.cancelPrescription);
+
 module.exports = router;

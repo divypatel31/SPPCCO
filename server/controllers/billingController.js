@@ -284,35 +284,47 @@ exports.getPatientBills = async (req, res) => {
     const patientId = req.user.user_id || req.user.id;
 
     if (!patientId) {
-      return res.status(400).json({
-        message: "Invalid patient session"
-      });
+      return res.status(400).json({ message: "Invalid patient session" });
     }
 
+    // 1. Fetch the main bills
     const [bills] = await db.execute(
-      `SELECT 
-          bill_id,
-          appointment_id,
-          bill_type,
-          total_amount,
-          payment_status,
-          payment_method,
-          paid_at,
-          generated_by,
-          created_at
-       FROM bills
-       WHERE patient_id = ?
-       ORDER BY bill_id DESC`,
+      `SELECT bill_id, appointment_id, bill_type, total_amount, 
+              payment_status, payment_method, paid_at, created_at
+       FROM bills WHERE patient_id = ? ORDER BY bill_id DESC`,
       [patientId]
     );
+
+    // 2. Fetch items for each bill
+    for (let bill of bills) {
+      if (bill.bill_type === 'pharmacy') {
+        // JOIN with medicines table to get the name
+        const [items] = await db.execute(
+          `SELECT m.name AS item_name, bi.quantity, bi.price 
+           FROM bill_items bi
+           JOIN medicines m ON bi.medicine_id = m.medicine_id
+           WHERE bi.bill_id = ?`,
+          [bill.bill_id]
+        );
+        bill.items = items;
+      } else {
+        // For Lab or Consultation, bill_items might not have a medicine_id
+        // We fetch whatever is in bill_items or return empty
+        const [items] = await db.execute(
+          `SELECT description AS item_name, amount AS price, 1 AS quantity 
+           FROM bill_items WHERE bill_id = ?`,
+          [bill.bill_id]
+        ).catch(() => [[]]); // Catch error if columns don't exist for these types
+        
+        bill.items = items.length > 0 ? items : [];
+      }
+    }
 
     res.json(bills);
 
   } catch (error) {
     console.error("GET PATIENT BILLS ERROR:", error);
-    res.status(500).json({
-      message: "Failed to load bills"
-    });
+    res.status(500).json({ message: "Internal Server Error" });
   }
 };
 

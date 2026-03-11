@@ -121,7 +121,7 @@ export default function PharmacyBills() {
                     </td>
 
                     <td>
-                      {bill.payment_status !== 'paid' && (
+                      {bill.payment_status !==   'paid' && (
                         <button
                           onClick={() => markPaid(bill.bill_id)}
                           disabled={marking === bill.bill_id}
