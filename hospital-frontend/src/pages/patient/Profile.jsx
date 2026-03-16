@@ -4,17 +4,17 @@ import { Spinner, PageHeader } from '../../components/common';
 import { formatDate } from '../../utils/helpers';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { User, Save, Lock } from 'lucide-react'; // Added Lock icon
+import { User, Save, Lock } from 'lucide-react';
 
 export default function PatientProfile() {
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ full_name: '', phone: '', dob: '', gender: '', blood_group: '', address: '' });
+  const [form, setForm] = useState({ full_name: '', phone: '', dob: '', gender: '', address: '' });
   const [editing, setEditing] = useState(false);
 
-  // --- NEW: Password Change States ---
+  // --- Password Change States ---
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '' });
@@ -32,7 +32,6 @@ export default function PatientProfile() {
           phone: res.data.phone || '',
           dob: formattedDob,
           gender: res.data.gender || '',
-          blood_group: res.data.blood_group || '',
           address: res.data.address || ''
         });
 
@@ -59,7 +58,7 @@ export default function PatientProfile() {
     }
   };
 
-  // --- NEW: Password Change Handler ---
+  // --- Password Change Handler ---
   const handlePasswordChange = async (e) => {
     e.preventDefault();
     setSavingPassword(true);
@@ -102,7 +101,7 @@ export default function PatientProfile() {
             Patient
           </span>
 
-          {/* NEW: Change Password Button inside Avatar Card */}
+          {/* Change Password Button inside Avatar Card */}
           {!showPasswordForm && (
             <button 
               onClick={() => setShowPasswordForm(true)}
@@ -150,23 +149,15 @@ export default function PatientProfile() {
 
             <div className="grid sm:grid-cols-2 gap-4">
 
-              {/* Full Name */}
+              {/* Full Name (Read-only) */}
               <div>
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Full Name</p>
-                {editing ? (
-                  <input
-                    className="input-field text-sm w-full"
-                    value={form.full_name}
-                    onChange={e => setForm({ ...form, full_name: e.target.value })}
-                  />
-                ) : (
-                  <p className="text-sm font-medium text-gray-900">
-                    {data.full_name || '—'}
-                  </p>
-                )}
+                <p className="text-sm font-medium text-gray-900">
+                  {data.full_name || '—'}
+                </p>
               </div>
 
-              {/* Email (readonly) */}
+              {/* Email (Read-only) */}
               <div>
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Email</p>
                 <p className="text-sm font-medium text-gray-900">
@@ -174,71 +165,23 @@ export default function PatientProfile() {
                 </p>
               </div>
 
-              {/* Date of Birth */}
+              {/* Date of Birth (Read-only) */}
               <div>
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Date of Birth</p>
-                {editing ? (
-                  <input
-                    type="date"
-                    className="input-field text-sm w-full"
-                    value={form.dob}
-                    onChange={e => setForm({ ...form, dob: e.target.value })}
-                  />
-                ) : (
-                  <p className="text-sm font-medium text-gray-900">
-                    {data.dob ? formatDate(data.dob) : '—'}
-                  </p>
-                )}
+                <p className="text-sm font-medium text-gray-900">
+                  {data.dob ? formatDate(data.dob) : '—'}
+                </p>
               </div>
 
-              {/* Gender */}
+              {/* Gender (Read-only) */}
               <div>
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Gender</p>
-                {editing ? (
-                  <select
-                    className="input-field text-sm w-full"
-                    value={form.gender}
-                    onChange={e => setForm({ ...form, gender: e.target.value })}
-                  >
-                    <option value="">Select</option>
-                    <option value="male">Male</option>
-                    <option value="female">Female</option>
-                    <option value="other">Other</option>
-                  </select>
-                ) : (
-                  <p className="text-sm font-medium text-gray-900 capitalize">
-                    {data.gender || '—'}
-                  </p>
-                )}
+                <p className="text-sm font-medium text-gray-900 capitalize">
+                  {data.gender || '—'}
+                </p>
               </div>
 
-              {/* Blood Group */}
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Blood Group</p>
-                {editing ? (
-                  <select
-                    className="input-field text-sm w-full"
-                    value={form.blood_group}
-                    onChange={e => setForm({ ...form, blood_group: e.target.value })}
-                  >
-                    <option value="">Select</option>
-                    <option>A+</option>
-                    <option>A-</option>
-                    <option>B+</option>
-                    <option>B-</option>
-                    <option>AB+</option>
-                    <option>AB-</option>
-                    <option>O+</option>
-                    <option>O-</option>
-                  </select>
-                ) : (
-                  <p className="text-sm font-medium text-gray-900">
-                    {data.blood_group || '—'}
-                  </p>
-                )}
-              </div>
-
-              {/* Phone */}
+              {/* Phone (Editable) */}
               <div>
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Phone</p>
                 {editing ? (
@@ -254,7 +197,7 @@ export default function PatientProfile() {
                 )}
               </div>
 
-              {/* Address */}
+              {/* Address (Editable) */}
               <div className="sm:col-span-2">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Address</p>
                 {editing ? (
@@ -271,7 +214,7 @@ export default function PatientProfile() {
                 )}
               </div>
 
-              {/* Registration Date */}
+              {/* Registration Date (Read-only) */}
               <div>
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Registration Date</p>
                 <p className="text-sm font-medium text-gray-900">
@@ -282,7 +225,7 @@ export default function PatientProfile() {
             </div>
           </div>
 
-          {/* NEW: Change Password Form Card (Only visible when clicked) */}
+          {/* Change Password Form Card */}
           {showPasswordForm && (
             <div className="card border-t-4 border-t-blue-500">
               <div className="flex items-center justify-between mb-4">
@@ -346,4 +289,4 @@ export default function PatientProfile() {
       </div>
     </div>
   );
-}
+} 

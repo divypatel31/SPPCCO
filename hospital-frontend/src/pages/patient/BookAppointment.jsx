@@ -5,7 +5,7 @@ import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import { Calendar } from 'lucide-react';
 
-// Organized time slots logically
+// Organized time slots logically (15-minute intervals)
 const TIME_SLOTS = [
   '09:00', '09:15', '09:30', '09:45',
   '10:00', '10:15', '10:30', '10:45',
@@ -16,11 +16,24 @@ const TIME_SLOTS = [
 ];
 
 const formatTime12 = (t) => {
+  if (!t) return '';
   const [h, m] = t.split(':');
   const hour = parseInt(h);
   const ampm = hour >= 12 ? 'PM' : 'AM';
   const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
   return `${displayHour}:${m} ${ampm}`;
+};
+
+// 🔥 NEW: Automatically calculates end time (+15 mins) based on start time
+const getEndTime = (timeStr) => {
+  if (!timeStr) return '';
+  let [h, m] = timeStr.split(':').map(Number);
+  m += 15; // Adds 15 minutes for the slot duration
+  if (m >= 60) {
+    h += 1;
+    m -= 60;
+  }
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 };
 
 export default function BookAppointment() {
@@ -38,7 +51,7 @@ export default function BookAppointment() {
   // Calculate allowed date range (Today to +7 Days)
   const todayDateObj = new Date();
   const today = todayDateObj.toISOString().split('T')[0];
-  
+
   const maxDateObj = new Date();
   maxDateObj.setDate(todayDateObj.getDate() + 7);
   const maxDate = maxDateObj.toISOString().split('T')[0];
@@ -53,8 +66,9 @@ export default function BookAppointment() {
         }
       })
         .then(res => {
-          // Extract just the time string from the backend response
-          const times = res.data.map(r => r.appointment_time);
+          // 🔥 FIX: MySQL sends "09:00:00". We use .slice(0, 5) to chop off the seconds!
+          // This makes it perfectly match "09:00" in our frontend array.
+          const times = res.data.map(r => r.appointment_time.slice(0, 5));
           setBookedSlots(times);
         })
         .catch(() => {
@@ -62,7 +76,6 @@ export default function BookAppointment() {
         });
     }
   }, [form.department, form.appointment_date]);
-
   /* Fetch available departments on load */
   useEffect(() => {
     const fetchDepartments = async () => {
@@ -96,34 +109,24 @@ export default function BookAppointment() {
     }
   };
 
-  // 🔥 FIXED LOGIC: Correctly disables past time slots for today
   const isPastTimeSlot = (slotTime) => {
-    if (!form.appointment_date) return true; // Disabled if no date selected
+    if (!form.appointment_date) return true;
 
     const now = new Date();
     const selectedDate = new Date(form.appointment_date);
-    
-    // Normalize dates to midnight to compare just the day
+
     const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const selectedMidnight = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
 
-    // If they picked a date in the past, disable ALL slots
     if (selectedMidnight < todayMidnight) return true;
-    
-    // If they picked a date in the future, enable ALL slots
     if (selectedMidnight > todayMidnight) return false;
 
-    // If they picked TODAY, check the specific time
     if (selectedMidnight.getTime() === todayMidnight.getTime()) {
       const [slotHour, slotMinute] = slotTime.split(':').map(Number);
-      
       const currentHour = now.getHours();
       const currentMinute = now.getMinutes();
 
-      // If the slot hour is earlier than the current hour, it's past
       if (slotHour < currentHour) return true;
-      
-      // If it's the current hour, check if the minutes have passed
       if (slotHour === currentHour && slotMinute <= currentMinute) return true;
     }
 
@@ -185,8 +188,6 @@ export default function BookAppointment() {
                   {TIME_SLOTS.map(slot => {
                     const isBooked = bookedSlots.includes(slot);
                     const isPast = isPastTimeSlot(slot);
-                    
-                    // A slot is disabled if it's booked OR if it's in the past
                     const disabled = isBooked || isPast;
 
                     return (
@@ -211,7 +212,7 @@ export default function BookAppointment() {
               </div>
             )}
 
-            {/* Summary */}
+            {/* 🔥 FIXED Summary Box - Removed form.end_time condition */}
             {form.department && form.appointment_date && form.start_time && (
               <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
                 <h3 className="text-sm font-semibold text-blue-900 mb-2">
@@ -219,8 +220,19 @@ export default function BookAppointment() {
                 </h3>
                 <div className="space-y-1 text-sm text-blue-800">
                   <p><strong>Department:</strong> {form.department}</p>
-                  <p><strong>Date:</strong> {new Date(form.appointment_date).toDateString()}</p>
-                  <p><strong>Time:</strong> {formatTime12(form.start_time)}</p>
+
+                  {/* Date Formatting */}
+                  <p><strong>Date:</strong> {new Date(form.appointment_date).toLocaleDateString('en-IN', {
+                    weekday: 'short',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                  })}</p>
+
+                  {/* Automatically calculates and formats start and end time */}
+                  <p>
+                    <strong>Time:</strong> {formatTime12(form.start_time)} - {formatTime12(getEndTime(form.start_time))}
+                  </p>
                 </div>
               </div>
             )}

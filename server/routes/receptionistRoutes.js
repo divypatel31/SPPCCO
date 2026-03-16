@@ -37,6 +37,12 @@ router.post("/cancel-appointment", receptionistController.cancelAppointmentByRec
 
 router.put("/arrived/:id", receptionistController.markArrived);
 
+router.get("/all-doctors", receptionistController.getAllDoctors);
+
+router.get("/doctor-schedule", receptionistController.getDoctorSchedule);
+
+router.get("/consultation-fee", receptionistController.getConsultationFee);
+
 router.get(
   "/queue",
   verifyToken,

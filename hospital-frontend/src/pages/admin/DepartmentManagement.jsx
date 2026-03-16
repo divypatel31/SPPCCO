@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { PageHeader, Modal, EmptyState, Spinner } from '../../components/common';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Building2, Plus } from 'lucide-react';
+// 🔥 Added Trash2 here
+import { Building2, Plus, Trash2 } from 'lucide-react';
 
 const emptyForm = {
   name: '',
@@ -76,6 +77,19 @@ export default function DepartmentManagement() {
     }
   };
 
+  // 🔥 NEW: handleDelete Function
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this department? This cannot be undone.")) return;
+
+    try {
+      await api.delete(`/admin/departments/${id}`);
+      toast.success("Department deleted successfully");
+      fetchDepartments();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete department");
+    }
+  };
+
   if (loading) return <Spinner />;
 
   return (
@@ -126,7 +140,7 @@ export default function DepartmentManagement() {
               </p>
 
               <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   <button
                     className="text-xs text-blue-600 hover:underline"
                     onClick={() => {
@@ -144,12 +158,20 @@ export default function DepartmentManagement() {
                   <button
                     className={`text-xs hover:underline ${
                       dept.status === "active"
-                        ? "text-red-600"
+                        ? "text-orange-600"
                         : "text-green-600"
                     }`}
                     onClick={() => handleToggleStatus(dept.department_id)}
                   >
                     {dept.status === "active" ? "Deactivate" : "Activate"}
+                  </button>
+
+                  {/* 🔥 NEW: Delete Button */}
+                  <button
+                    className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1 hover:underline"
+                    onClick={() => handleDelete(dept.department_id)}
+                  >
+                    <Trash2 size={14} /> Delete
                   </button>
                 </div>
               </div>

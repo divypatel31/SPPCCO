@@ -16,5 +16,6 @@ router.post("/prescription", doctorController.addPrescription);
 router.post("/lab-request", doctorController.addLabRequest);
 router.put("/complete/:id", doctorController.completeConsultation);
 router.put("/cancel/:id", doctorController.cancelAppointment);
+router.get("/my-schedule", doctorController.getMySchedule);
 
 module.exports = router;

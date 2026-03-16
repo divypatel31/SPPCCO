@@ -103,6 +103,7 @@ exports.assignDoctor = async (req, res) => {
     conn.release();
   }
 };
+
 /* ==============================
    3️⃣ MARK PATIENT ARRIVED & CUT DYNAMIC CONSULTATION FEE
 ================================= */
@@ -113,7 +114,7 @@ exports.markArrived = async (req, res) => {
   try {
     await conn.beginTransaction();
 
-    // 🔥 NEW: Fetch the dynamic consultation fee set by the Admin
+    // Fetch the dynamic consultation fee set by the Admin
     const [adminRows] = await conn.query("SELECT consultation_fee FROM users WHERE role = 'admin' LIMIT 1");
     const CONSULTATION_FEE = Number(adminRows[0]?.consultation_fee) || 0;
 
@@ -164,7 +165,6 @@ exports.markArrived = async (req, res) => {
 /* ==============================
    4️⃣ GET COMPLETED APPOINTMENTS
 ================================= */
-
 exports.getCompletedAppointments = async (req, res) => {
   try {
     const [rows] = await db.execute(`
@@ -207,10 +207,6 @@ exports.getCompletedAppointments = async (req, res) => {
 /* ==============================
    5️⃣ GENERATE BILL
 ================================= */
-
-/*
-  POST /api/receptionist/generate-bill
-*/
 exports.generateBill = async (req, res) => {
   try {
     const {
@@ -218,14 +214,12 @@ exports.generateBill = async (req, res) => {
       patient_id,
       consultation_fee,
       lab_charges,
-      medicine_charges,
-      other_charges,
       total_amount
     } = req.body;
 
     const generated_by = req.user?.id || req.user?.user_id || null;
 
-    // 🔥 CHANGED 'unpaid' to 'paid' so it unlocks the Patient's PDF immediately!
+    // Create the Main Bill
     const [billResult] = await db.execute(`
       INSERT INTO bills 
       (appointment_id, patient_id, bill_type, total_amount, payment_status, generated_by, created_at)
@@ -234,21 +228,18 @@ exports.generateBill = async (req, res) => {
 
     const bill_id = billResult.insertId;
 
-    try {
-      if (Number(consultation_fee) > 0) {
-        await db.execute("INSERT INTO bill_items (bill_id, medicine_id, quantity, price) VALUES (?, NULL, 1, ?)", [bill_id, consultation_fee]);
-      }
-      if (Number(lab_charges) > 0) {
-        await db.execute("INSERT INTO bill_items (bill_id, medicine_id, quantity, price) VALUES (?, NULL, 1, ?)", [bill_id, lab_charges]);
-      }
-      if (Number(medicine_charges) > 0) {
-        await db.execute("INSERT INTO bill_items (bill_id, medicine_id, quantity, price) VALUES (?, NULL, 1, ?)", [bill_id, medicine_charges]);
-      }
-      if (Number(other_charges) > 0) {
-        await db.execute("INSERT INTO bill_items (bill_id, medicine_id, quantity, price) VALUES (?, NULL, 1, ?)", [bill_id, other_charges]);
-      }
-    } catch (itemErr) {
-      console.log("Note: Could not insert individual items, but main bill was saved.", itemErr.message);
+    // 🔥 REMOVED THE SILENT TRY/CATCH. If this fails, it will now throw a real error!
+    if (Number(consultation_fee) > 0) {
+      await db.execute(
+        "INSERT INTO bill_items (bill_id, quantity, price, description) VALUES (?, 1, ?, 'Consultation Fee')", 
+        [bill_id, consultation_fee]
+      );
+    }
+    if (Number(lab_charges) > 0) {
+      await db.execute(
+        "INSERT INTO bill_items (bill_id, quantity, price, description) VALUES (?, 1, ?, 'Laboratory Charges')", 
+        [bill_id, lab_charges]
+      );
     }
 
     // Update the appointment status
@@ -262,10 +253,10 @@ exports.generateBill = async (req, res) => {
 
   } catch (error) {
     console.error("🚨 GENERATE BILL CRASH:", error);
-    res.status(500).json({ message: error.message || "Failed to generate bill" });
+    // 🔥 Now React will show exactly WHY the items are failing in the red toast popup!
+    res.status(500).json({ message: "Item Error: " + error.message });
   }
 };
-
 /* ==============================
    6️⃣ MARK BILL PAID
 ================================= */
@@ -297,7 +288,9 @@ exports.registerWalkInPatient = async (req, res) => {
     const [existing] = await db.query("SELECT user_id FROM users WHERE phone = ?", [phone]);
     if (existing.length > 0) return res.status(400).json({ message: "Patient already exists with this phone" });
 
-    const hashedPassword = await bcrypt.hash(phone, 10);
+    // 🔥 SETTING DEFAULT PASSWORD TO PHONE NUMBER
+    const defaultPassword = phone;
+    const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
     const [result] = await db.query(
       `INSERT INTO users 
@@ -306,8 +299,15 @@ exports.registerWalkInPatient = async (req, res) => {
       [name, email, phone, hashedPassword, dob, gender, address || null]
     );
 
-    res.status(201).json({ message: "Patient registered successfully", user_id: result.insertId, name, phone });
+    // 🔥 Sending clear message so Receptionist can inform patient
+    res.status(201).json({ 
+      message: "Patient registered! Ask them to login using their phone number as the password.", 
+      user_id: result.insertId, 
+      name, 
+      phone 
+    });
   } catch (error) {
+    console.error("REGISTER ERROR:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -374,5 +374,49 @@ exports.getQueueByDate = async (req, res) => {
     res.json(rows);
   } catch (err) {
     res.status(500).json({ message: "Failed to load queue" });
+  }
+};
+
+/* ==============================
+   9️⃣ GET ALL DOCTORS & SCHEDULE
+================================= */
+exports.getAllDoctors = async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT user_id, full_name, department FROM users WHERE role='doctor' AND status='active'`
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.getDoctorSchedule = async (req, res) => {
+  try {
+    const { doctor_id, date } = req.query;
+    const [rows] = await db.query(
+      `SELECT a.appointment_time, a.status, p.full_name as patient_name
+       FROM appointments a
+       JOIN users p ON a.patient_id = p.user_id
+       WHERE a.doctor_id = ? AND a.appointment_date = ? AND a.status != 'cancelled'`,
+      [doctor_id, date]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+/* ==============================
+   GET CONSULTATION FEE (For Billing)
+================================= */
+exports.getConsultationFee = async (req, res) => {
+  try {
+    // Fetch the dynamic fee set by the admin
+    const [rows] = await db.query("SELECT consultation_fee FROM users WHERE role = 'admin' LIMIT 1");
+    res.json({ fee: rows[0]?.consultation_fee || 0 });
+  } catch (error) {
+    console.error("GET FEE ERROR:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };

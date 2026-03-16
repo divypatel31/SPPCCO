@@ -9,17 +9,23 @@ import { Clock, Users, CreditCard, CheckCircle, ArrowRight, UserPlus } from 'luc
 export default function ReceptionistDashboard() {
   const [pending, setPending] = useState([]);
   const [queue, setQueue] = useState([]);
+  const [todayPatients, setTodayPatients] = useState(0); // 🔥 NEW STATE
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [pendRes, queueRes] = await Promise.allSettled([
+        // 🔥 FIX: Added today-queue fetch to get today's patient count!
+        const [pendRes, queueRes, todayRes] = await Promise.allSettled([
           api.get('/receptionist/pending-appointments'),
           api.get('/receptionist/completed-appointments'),
+          api.get('/receptionist/today-queue') 
         ]);
+        
         if (pendRes.status === 'fulfilled') setPending(pendRes.value.data || []);
         if (queueRes.status === 'fulfilled') setQueue(queueRes.value.data || []);
+        if (todayRes.status === 'fulfilled') setTodayPatients(todayRes.value.data?.length || 0);
+        
       } catch {}
       finally { setLoading(false); }
     };
@@ -27,6 +33,10 @@ export default function ReceptionistDashboard() {
   }, []);
 
   if (loading) return <Spinner />;
+
+  // 🔥 FIX: Split the queue into bills that need generation vs already generated
+  const pendingBills = queue.filter(appt => appt.billing_status !== 'generated' && appt.billing_status !== 'paid');
+  const billsGenerated = queue.filter(appt => appt.billing_status === 'generated' || appt.billing_status === 'paid').length;
 
   return (
     <div>
@@ -45,9 +55,10 @@ export default function ReceptionistDashboard() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard icon={Clock} label="Pending Requests" value={pending.length} color="orange" />
-        <StatCard icon={CreditCard} label="Ready for Billing" value={queue.length} color="green" />
-        <StatCard icon={Users} label="Today's Patients" value="—" color="blue" />
-        <StatCard icon={CheckCircle} label="Bills Generated" value="—" color="purple" />
+        {/* 🔥 FIX: Updated with dynamic accurate values */}
+        <StatCard icon={CreditCard} label="Ready for Billing" value={pendingBills.length} color="green" />
+        <StatCard icon={Users} label="Today's Patients" value={todayPatients} color="blue" />
+        <StatCard icon={CheckCircle} label="Bills Generated" value={billsGenerated} color="purple" />
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
@@ -63,8 +74,8 @@ export default function ReceptionistDashboard() {
             <EmptyState icon={Clock} title="No pending requests" description="All appointments have been assigned" />
           ) : (
             <div className="space-y-3">
-              {pending.slice(0, 4).map(appt => (
-                <div key={appt._id || appt.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+              {pending.slice(0, 4).map((appt, index) => (
+                <div key={appt.appointment_id || appt.id || index} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{appt.patient_name || 'Patient'}</p>
                     <p className="text-xs text-gray-500">{appt.department} · {formatDate(appt.appointment_date || appt.date)}</p>
@@ -85,17 +96,18 @@ export default function ReceptionistDashboard() {
               Go to Billing <ArrowRight size={14} />
             </Link>
           </div>
-          {queue.length === 0 ? (
+          {/* 🔥 FIX: Using pendingBills instead of queue so generated bills don't show here */}
+          {pendingBills.length === 0 ? (
             <EmptyState icon={CreditCard} title="No pending billing" description="Completed appointments will appear here" />
           ) : (
             <div className="space-y-3">
-              {queue.slice(0, 4).map(appt => (
-                <div key={appt._id || appt.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+              {pendingBills.slice(0, 4).map((appt, index) => (
+                <div key={appt.appointment_id || appt.id || index} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{appt.patient_name || 'Patient'}</p>
                     <p className="text-xs text-gray-500">Dr. {appt.doctor_name} · {formatDate(appt.appointment_date || appt.date)}</p>
                   </div>
-                  <span className="text-xs bg-teal-100 text-teal-700 px-2 py-1 rounded-full font-medium">Bill Pending</span>
+                  <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full font-medium">Needs Bill</span>
                 </div>
               ))}
             </div>
@@ -104,4 +116,4 @@ export default function ReceptionistDashboard() {
       </div>
     </div>
   );
-}
+} 

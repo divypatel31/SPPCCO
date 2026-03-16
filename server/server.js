@@ -18,6 +18,8 @@ const adminRoutes = require("./routes/adminRoutes");
 const pharmacyRoutes = require("./routes/pharmacyRoutes");
 const departmentRoutes = require("./routes/departmentRoutes");
 const reportRoutes = require("./routes/reportRoutes");
+const startAutoCancelJob = require("./cron/autoCancel");
+const aiRoutes=require("./routes/aiRoutes");
 
 const app = express();
 
@@ -45,11 +47,14 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/pharmacy", pharmacyRoutes);
 app.use("/api/departments", departmentRoutes);
 app.use("/api/reports", reportRoutes);
+app.use('/api/ai', aiRoutes);
 
 /* Root Test */
 app.get("/", (req, res) => {
   res.send("Hospital Management Backend Running");
 });
+
+startAutoCancelJob();
 
 /* Server Start */
 const PORT = process.env.PORT || 5000;

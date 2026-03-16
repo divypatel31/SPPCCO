@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from "react";
 import api from "../../utils/api";
-import { Settings, Save, IndianRupee, Percent } from "lucide-react";
+import { Settings, Save, IndianRupee } from "lucide-react";
 
 const SystemSettings = () => {
   const [form, setForm] = useState({
     consultation_fee: 0,
-    tax_percent: 0,
   });
 
   const [loading, setLoading] = useState(false);
@@ -17,11 +16,11 @@ const SystemSettings = () => {
 
   const fetchSettings = async () => {
     try {
-      // Temporarily grabbing from profile if needed, or initializing to 0
-      const res = await api.get("/admin/profile").catch(() => ({ data: {} }));
+      // 🔥 Fetching the actual fee from the backend
+      const res = await api.get("/admin/consultation-fee");
+      
       setForm({
-        consultation_fee: res.data.consultation_fee || 0,
-        tax_percent: res.data.tax_percent || 0,
+        consultation_fee: res.data.fee || 0,
       });
     } catch (err) {
       console.error(err);
@@ -38,9 +37,12 @@ const SystemSettings = () => {
     setSuccess(false);
 
     try {
-      // 🔥 FIXED API ROUTE: Points to the actual route in your adminRoutes.js
+      // Pushing the updated fee to the backend
       await api.put("/admin/consultation-fee", form);
       setSuccess(true);
+      
+      // Auto-hide success message after 3 seconds
+      setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
       console.error(err);
     } finally {
@@ -49,13 +51,11 @@ const SystemSettings = () => {
   };
 
   // Live Preview Calculation
-  const subtotal = Number(form.consultation_fee);
-  const taxAmount = (subtotal * Number(form.tax_percent)) / 100;
-  const finalTotal = subtotal + taxAmount;
+  const finalTotal = Number(form.consultation_fee);
 
   return (
     <div className="p-8 bg-gray-50 min-h-screen">
-      <div className="max-w-5xl mx-auto bg-white shadow-2xl rounded-2xl p-10">
+      <div className="max-w-3xl mx-auto bg-white shadow-2xl rounded-2xl p-10">
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
@@ -65,7 +65,7 @@ const SystemSettings = () => {
           </h1>
         </div>
 
-        <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <form onSubmit={handleSave} className="grid grid-cols-1 gap-8">
 
           {/* Consultation Fee */}
           <div>
@@ -73,7 +73,7 @@ const SystemSettings = () => {
               Consultation Fee
             </label>
             <div className="flex border rounded-lg overflow-hidden">
-              <span className="bg-gray-200 px-4 py-2">
+              <span className="bg-gray-200 px-4 py-2 flex items-center justify-center">
                 <IndianRupee size={18} />
               </span>
               <input
@@ -81,47 +81,28 @@ const SystemSettings = () => {
                 name="consultation_fee"
                 value={form.consultation_fee}
                 onChange={handleChange}
-                className="w-full p-2 outline-none"
-              />
-            </div>
-          </div>
-
-          {/* Tax */}
-          <div>
-            <label className="font-semibold mb-2 block">
-              Tax Percentage
-            </label>
-            <div className="flex border rounded-lg overflow-hidden">
-              <span className="bg-gray-200 px-4 py-2">
-                <Percent size={18} />
-              </span>
-              <input
-                type="number"
-                name="tax_percent"
-                value={form.tax_percent}
-                onChange={handleChange}
-                className="w-full p-2 outline-none"
+                className="w-full p-3 outline-none"
+                placeholder="Enter base consultation fee"
+                required
               />
             </div>
           </div>
 
           {/* Live Preview */}
-          <div className="bg-gray-100 p-6 rounded-xl md:col-span-2">
-            <h3 className="font-semibold mb-4">Live Billing Preview</h3>
-            <p>Consultation: ₹{subtotal}</p>
-            <p>Tax ({form.tax_percent}%): ₹{taxAmount.toFixed(2)}</p>
-            <hr className="my-3" />
-            <p className="font-bold text-lg">
+          <div className="bg-gray-100 p-6 rounded-xl">
+            <h3 className="font-semibold mb-2 text-gray-700">Live Billing Preview</h3>
+            <p className="font-bold text-2xl text-gray-900">
               Final Total: ₹{finalTotal.toFixed(2)}
             </p>
+            <p className="text-sm text-gray-500 mt-1">This is the default amount charged to patients for standard consultations.</p>
           </div>
 
           {/* Save Button */}
-          <div className="md:col-span-2">
+          <div>
             <button
               type="submit"
               disabled={loading}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl transition flex items-center gap-2"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl transition flex items-center justify-center gap-2 w-full sm:w-auto"
             >
               <Save size={18} />
               {loading ? "Saving..." : "Save Settings"}

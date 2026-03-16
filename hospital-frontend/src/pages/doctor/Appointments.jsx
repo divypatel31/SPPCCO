@@ -20,16 +20,35 @@ export default function DoctorAppointments() {
 
   const filtered = filter === 'all' ? appointments : appointments.filter(a => a.status === filter);
 
+  // 🔥 FIX: Bulletproof String Sorting (No more 'Invalid Date' errors)
+  const sortedAppointments = [...filtered].sort((a, b) => {
+    // 1. Safely extract just the 'YYYY-MM-DD' part from the database timestamp
+    const dateA = (a.appointment_date || a.date || '').split('T')[0];
+    const dateB = (b.appointment_date || b.date || '').split('T')[0];
+
+    // 2. Sort by Date DESCENDING (Newest dates at the top)
+    if (dateA > dateB) return -1;
+    if (dateA < dateB) return 1;
+
+    // 3. If dates are the same, sort by Time ASCENDING (Morning first)
+    const timeA = a.appointment_time || a.start_time || '';
+    const timeB = b.appointment_time || b.start_time || '';
+    
+    if (timeA < timeB) return -1;
+    if (timeA > timeB) return 1;
+
+    return 0;
+  });
+
   const cancelAppointment = async (id) => {
     const confirmCancel = window.confirm("Cancel this appointment?");
     if (!confirmCancel) return;
 
     try {
       const res = await api.put(`/doctor/cancel/${id}`);
-
       toast.success(res.data.message || "Appointment cancelled");
 
-      // Immediately update UI instead of waiting for fetch
+      // Immediately update UI
       setAppointments(prev =>
         prev.map(appt =>
           appt.appointment_id === id
@@ -37,7 +56,6 @@ export default function DoctorAppointments() {
             : appt
         )
       );
-
     } catch (err) {
       console.log(err.response?.data);
       toast.error(err.response?.data?.message || "Cancel failed");
@@ -55,15 +73,18 @@ export default function DoctorAppointments() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors ${filter === f ? 'bg-teal-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors ${
+              filter === f 
+                ? 'bg-teal-600 text-white' 
+                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+            }`}
           >
             {f.replace(/_/g, ' ')} {f === 'all' && `(${appointments.length})`}
           </button>
         ))}
       </div>
 
-      {filtered.length === 0 ? (
+      {sortedAppointments.length === 0 ? (
         <div className="card">
           <EmptyState icon={Calendar} title="No appointments found" description="No appointments match the selected filter" />
         </div>
@@ -82,40 +103,44 @@ export default function DoctorAppointments() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(appt => (
-                  <tr key={appt.appointment_id}>
-                    <td className="font-medium">{appt.patient_name || '—'}</td>
-                    <td>{appt.department || '—'}</td>
-                    <td>{formatDate(appt.appointment_date || appt.date)}</td>
-                    <td>{appt.start_time ? `${formatTime(appt.start_time)}` : '—'}</td>
-                    <td><StatusBadge status={appt.status} /></td>
-                    <td>
-                      {['arrived', 'in_consultation'].includes(appt.status) && (
-                        <Link
-                          to={`/doctor/consultation/${appt.appointment_id}`}
-                          className="inline-flex items-center gap-1 text-sm text-teal-600 hover:text-teal-800 font-medium"
-                        >
-                          <Stethoscope size={14} />
-                          {appt.status === 'arrived' ? 'Start Consult' : 'Continue'}
-                        </Link>
-                      )}
+                {sortedAppointments.map(appt => {
+                  // Grab the safe time variable
+                  const time = appt.appointment_time || appt.start_time;
 
-                      {appt.status === 'completed' && (
-                        <span className="text-gray-400 text-xs">Completed</span>
-                      )}
+                  return (
+                    <tr key={appt.appointment_id}>
+                      <td className="font-medium">{appt.patient_name || '—'}</td>
+                      <td>{appt.department || '—'}</td>
+                      <td>{formatDate(appt.appointment_date || appt.date)}</td>
+                      <td className="font-semibold text-gray-700">{time ? formatTime(time) : '—'}</td>
+                      <td><StatusBadge status={appt.status} /></td>
+                      <td>
+                        {['arrived', 'in_consultation'].includes(appt.status) && (
+                          <Link
+                            to={`/doctor/consultation/${appt.appointment_id}`}
+                            className="inline-flex items-center gap-1 text-sm text-teal-600 hover:text-teal-800 font-medium bg-teal-50 px-3 py-1.5 rounded-lg"
+                          >
+                            <Stethoscope size={14} />
+                            {appt.status === 'arrived' ? 'Start Consult' : 'Continue'}
+                          </Link>
+                        )}
 
-                      {appt.status === 'scheduled' && (
-                        <button
-                          onClick={() => cancelAppointment(appt.appointment_id)}
-                          className="btn-danger"
-                        >
-                          Cancel
-                        </button>
-                      )}
+                        {appt.status === 'completed' && (
+                          <span className="text-gray-400 text-xs font-medium">Completed</span>
+                        )}
 
-                    </td>
-                  </tr>
-                ))}
+                        {appt.status === 'scheduled' && (
+                          <button
+                            onClick={() => cancelAppointment(appt.appointment_id)}
+                            className="text-red-600 hover:text-red-800 text-sm font-medium hover:underline"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

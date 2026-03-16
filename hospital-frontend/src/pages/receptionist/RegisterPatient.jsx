@@ -12,17 +12,40 @@ export default function RegisterPatient() {
   const [success, setSuccess] = useState(false);
   const [created, setCreated] = useState(null);
 
+  const todayDate = new Date().toISOString().split('T')[0];
+
   const handleChange = e => setForm({ ...form, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.phone || !form.dob || !form.gender) {
-      toast.error('Please fill required fields');
+    
+    // 🔥 Check fields one by one and MOVE CURSOR to the empty/wrong one
+    if (!form.name.trim()) {
+      toast.error('Please enter full name');
+      document.getElementsByName('name')[0]?.focus();
       return;
     }
+    
+    if (!form.phone || !/^[0-9]{10}$/.test(form.phone)) {
+      toast.error('Please enter a valid 10-digit phone number');
+      document.getElementsByName('phone')[0]?.focus();
+      return;
+    }
+
+    if (!form.dob) {
+      toast.error('Please select Date of Birth');
+      document.getElementsByName('dob')[0]?.focus();
+      return;
+    }
+
+    if (!form.gender) {
+      toast.error('Please select gender');
+      document.getElementsByName('gender')[0]?.focus();
+      return;
+    }
+
     setLoading(true);
     try {
-      // Use auth register endpoint with walk-in flag
       const res = await api.post('/receptionist/register-patient', {
         ...form,
         password: form.phone, // default password = phone number
@@ -65,19 +88,43 @@ export default function RegisterPatient() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="label">Full Name *</label>
-                  <input name="name" className="input-field" placeholder="Patient full name" value={form.name} onChange={handleChange} required />
+                  <input 
+                    name="name" 
+                    className="input-field" 
+                    placeholder="Patient full name" 
+                    value={form.name} 
+                    onChange={handleChange} 
+                  />
                 </div>
                 <div>
                   <label className="label">Phone *</label>
-                  <input name="phone" className="input-field" placeholder="Phone number" value={form.phone} onChange={handleChange} required />
+                  <input 
+                    name="phone" 
+                    className="input-field" 
+                    placeholder="10-digit number" 
+                    value={form.phone} 
+                    onChange={e => {
+                      // Instantly block letters in the phone box
+                      e.target.value = e.target.value.replace(/\D/g, '');
+                      handleChange(e);
+                    }}
+                    maxLength="10"
+                  />
                 </div>
                 <div>
                   <label className="label">Date of Birth *</label>
-                  <input name="dob" type="date" className="input-field" value={form.dob} onChange={handleChange} required />
+                  <input 
+                    name="dob" 
+                    type="date" 
+                    className="input-field" 
+                    value={form.dob} 
+                    onChange={handleChange} 
+                    max={todayDate} 
+                  />
                 </div>
                 <div>
                   <label className="label">Gender *</label>
-                  <select name="gender" className="input-field" value={form.gender} onChange={handleChange} required>
+                  <select name="gender" className="input-field" value={form.gender} onChange={handleChange}>
                     <option value="">Select</option>
                     <option value="male">Male</option>
                     <option value="female">Female</option>

@@ -73,4 +73,6 @@ router.put(
 // Add this with your other routes
 router.put("/cancel/:id", authorizeRole("pharmacy"), pharmacyController.cancelPrescription);
 
+router.get("/bills/:id/details",  pharmacyController.getBillDetails);
+
 module.exports = router;

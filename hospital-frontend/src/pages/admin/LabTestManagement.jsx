@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { PageHeader, Modal, EmptyState, Spinner } from "../../components/common";
 import api from "../../utils/api";
 import toast from "react-hot-toast";
-import { FlaskConical, Plus } from "lucide-react";
+// 🔥 Added Trash2 here
+import { FlaskConical, Plus, Trash2 } from "lucide-react";
 
 const emptyForm = {
   name: "",
@@ -81,6 +82,19 @@ export default function LabTestManagement() {
     }
   };
 
+  // 🔥 NEW: handleDelete Function
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this lab test? This cannot be undone.")) return;
+
+    try {
+      await api.delete(`/admin/lab-tests/${id}`);
+      toast.success("Lab test deleted successfully");
+      fetchData();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete test");
+    }
+  };
+
   if (loading) return <Spinner />;
 
   return (
@@ -134,7 +148,7 @@ export default function LabTestManagement() {
               <p className="text-sm font-medium mt-2">₹{test.price}</p>
 
               <div className="flex justify-between mt-4 pt-3 border-t">
-                <div className="flex gap-2">
+                <div className="flex gap-3">
                   <button
                     className="text-xs text-blue-600 hover:underline"
                     onClick={() => {
@@ -154,12 +168,20 @@ export default function LabTestManagement() {
                   <button
                     className={`text-xs hover:underline ${
                       test.status === "active"
-                        ? "text-red-600"
+                        ? "text-orange-600"
                         : "text-green-600"
                     }`}
                     onClick={() => toggleStatus(test.lab_test_id)}
                   >
                     {test.status === "active" ? "Deactivate" : "Activate"}
+                  </button>
+
+                  {/* 🔥 NEW: Delete Button */}
+                  <button
+                    className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1 hover:underline"
+                    onClick={() => handleDelete(test.lab_test_id)}
+                  >
+                    <Trash2 size={14} /> Delete
                   </button>
                 </div>
               </div>

@@ -3,7 +3,7 @@ import { Spinner, EmptyState, StatusBadge, PageHeader, Modal } from '../../compo
 import { formatDate, formatCurrency } from '../../utils/helpers';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Pill, ShoppingCart, Trash2 } from 'lucide-react'; // 🔥 Added Trash2 icon
+import { Pill, ShoppingCart, Trash2, Package } from 'lucide-react'; 
 
 export default function Prescriptions() {
   const [prescriptions, setPrescriptions] = useState([]);
@@ -28,7 +28,6 @@ export default function Prescriptions() {
     fetchPrescriptions();
   }, []);
 
-  // 🔥 NEW: Handle Cancelling an Old Prescription
   const handleCancel = async (id) => {
     if (!window.confirm("Cancel this prescription? Use this only if the patient hasn't shown up to collect their medicines.")) return;
     
@@ -41,16 +40,56 @@ export default function Prescriptions() {
     }
   };
 
+  // 🔥 THE SMART CALCULATION FUNCTION (Optimized for Tablets, Syrups, & Creams)
+  const calculateDispensingQty = (med) => {
+    const dose = Number(med.dose) || 1;
+    const freq = Number(med.frequency) || 1;
+    const days = Number(med.duration) || 1;
+    const packSize = Number(med.pack_size) || 1; 
+
+    // Total raw amount needed (e.g., total tablets, total ml, total mg)
+    const totalRequired = dose * freq * days;
+    const unit = (med.unit || '').toLowerCase();
+
+    // 1️⃣ LIQUIDS & DROPS (Syrups, Suspensions, Eye Drops)
+    if (unit === 'ml' || unit === 'drop') {
+      // If pack size is defined (e.g. 100ml bottle), calculate how many bottles are needed
+      if (packSize > 1) {
+        return Math.ceil(totalRequired / packSize);
+      }
+      // Failsafe: If pack size is missing (1) but total is large (e.g. 75ml), assume 1 bottle covers it.
+      // This prevents the system from billing 75 bottles by mistake!
+      return totalRequired > 15 ? 1 : Math.ceil(totalRequired); 
+    }
+
+    // 2️⃣ CREAMS & OINTMENTS (Tubes)
+    if (unit === 'tube') {
+      return Math.ceil(dose); // Just return the number of tubes prescribed
+    }
+
+    // 3️⃣ TABLETS & CAPSULES (Pack Dispensing vs Loose Units)
+    if (med.dispense_type === 'PACK') {
+      return Math.ceil(totalRequired / packSize); // E.g., Need 15 tabs, Pack has 10 = 2 Packs
+    }
+
+    // Default for loose UNIT dispensing
+    return Math.ceil(totalRequired); 
+  };
+
   const openDispense = async (presc) => {
     try {
       setSelected(presc);
       const res = await api.get(`/pharmacy/prescriptions/${presc.prescription_id}`);
       
-      const items = res.data.map(m => ({
-        ...m,
-        qty_dispensed: m.quantity_required,
-        unit_price: m.unit_price || 0,
-      }));
+      const items = res.data.map(m => {
+        const calculatedQty = calculateDispensingQty(m);
+        
+        return {
+          ...m,
+          qty_dispensed: calculatedQty, 
+          unit_price: m.unit_price || 0,
+        };
+      });
       
       setDispenseData(items);
     } catch (err) {
@@ -90,6 +129,15 @@ export default function Prescriptions() {
     }
   };
 
+  // Helper to determine the display name for the dispensing unit
+  const getDisplayUnit = (med) => {
+    const unit = (med.unit || '').toLowerCase();
+    if (unit === 'ml' || unit === 'drop') return 'Bottle(s)';
+    if (unit === 'tube') return 'Tube(s)';
+    if (med.dispense_type === 'PACK') return 'Pack(s)';
+    return (med.form || 'Unit') + '(s)';
+  };
+
   if (loading) return <Spinner />;
 
   return (
@@ -124,7 +172,6 @@ export default function Prescriptions() {
               </thead>
               <tbody>
                 {prescriptions.map(presc => {
-                  // 🔥 LOGIC: Check if prescription is older than 24 hours
                   const prescTime = new Date(presc.created_at).getTime();
                   const isOlderThan24Hours = (Date.now() - prescTime) > (24 * 60 * 60 * 1000);
 
@@ -137,7 +184,6 @@ export default function Prescriptions() {
                       <td className="text-gray-600 font-medium">Dr. {presc.doctor_name}</td>
                       <td className="text-sm text-gray-500">{formatDate(presc.created_at)}</td>
                       
-                      {/* Using the item_count we generated in the new SQL query */}
                       <td><span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-md text-xs font-bold">{presc.item_count} Meds</span></td>
                       
                       <td>
@@ -154,7 +200,6 @@ export default function Prescriptions() {
                           </button>
                         )}
 
-                        {/* 🔥 NEW: Show Cancel Button ONLY if 24 hours have passed */}
                         {isOlderThan24Hours && presc.dispensing_status !== 'dispensed' && (
                           <button
                             onClick={() => handleCancel(presc.prescription_id)}
@@ -179,7 +224,7 @@ export default function Prescriptions() {
         open={!!selected}
         onClose={() => setSelected(null)}
         title="Dispense Medicines & Bill"
-        width="max-w-3xl"
+        width="max-w-4xl" 
       >
         {selected && (
           <div className="space-y-4">
@@ -200,7 +245,8 @@ export default function Prescriptions() {
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Medicine</th>
-                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Qty Required</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Instructions</th>
+                    <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Qty to Dispense</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Unit Price (₹)</th>
                     <th className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Total</th>
                   </tr>
@@ -208,24 +254,56 @@ export default function Prescriptions() {
                 <tbody className="divide-y divide-gray-100">
                   {dispenseData.map((med, i) => (
                     <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-bold text-gray-800">
-                        {med.medicine_name}
-                        <p className="text-[10px] text-gray-400 font-normal mt-0.5">Current Stock: {med.stock}</p>
-                      </td>
+                      
+                      {/* Medicine Info */}
                       <td className="px-4 py-3">
-                        <input
-                          type="number"
-                          min="0"
-                          max={med.stock}
-                          className="w-20 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all outline-none"
-                          value={med.quantity_required}
-                          onChange={e => {
-                            const updated = [...dispenseData];
-                            updated[i].quantity_required = parseInt(e.target.value) || 0;
-                            setDispenseData(updated);
-                          }}
-                        />
+                        <p className="font-bold text-gray-900">{med.medicine_name || med.name}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] bg-gray-200 px-1.5 py-0.5 rounded text-gray-600 font-bold uppercase">{med.form || 'Tab'}</span>
+                          {med.dispense_type === 'PACK' && (
+                            <span className="text-[10px] text-purple-600 flex items-center gap-0.5">
+                              <Package size={10} /> {med.pack_size}{med.unit}/pack
+                            </span>
+                          )}
+                        </div>
+                        <p className={`text-[10px] font-bold mt-1 ${med.stock < med.qty_dispensed ? 'text-red-500' : 'text-gray-400'}`}>
+                          Stock: {med.stock || 0}
+                        </p>
                       </td>
+
+                      {/* Doctor's Orders Summary */}
+                      <td className="px-4 py-3 text-xs text-gray-600">
+                        <p>{med.dose}{med.unit} × {med.frequency}/day</p>
+                        <p>For {med.duration} days</p>
+                      </td>
+
+                      {/* Dispense Quantity Input */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            max={med.stock}
+                            className={`w-20 border rounded-lg px-3 py-1.5 text-sm font-bold outline-none transition-all ${
+                              med.stock < med.qty_dispensed ? 'border-red-400 focus:ring-red-500 text-red-600 bg-red-50' : 'border-gray-300 focus:ring-teal-500 text-gray-900'
+                            }`}
+                            value={med.qty_dispensed}
+                            onChange={e => {
+                              const updated = [...dispenseData];
+                              updated[i].qty_dispensed = parseInt(e.target.value) || 0;
+                              setDispenseData(updated);
+                            }}
+                          />
+                          <span className="text-xs text-gray-500 font-medium">
+                            {getDisplayUnit(med)}
+                          </span>
+                        </div>
+                        {med.stock < med.qty_dispensed && (
+                          <p className="text-[10px] text-red-500 mt-1 font-bold">Low Stock!</p>
+                        )}
+                      </td>
+
+                      {/* Price */}
                       <td className="px-4 py-3">
                         <input
                           type="number"
@@ -236,8 +314,10 @@ export default function Prescriptions() {
                           readOnly
                         />
                       </td>
+
+                      {/* Total Line Item */}
                       <td className="px-4 py-3 font-bold text-teal-700">
-                        {formatCurrency((med.quantity_required || 0) * (med.unit_price || 0))}
+                        {formatCurrency((med.qty_dispensed || 0) * (med.unit_price || 0))}
                       </td>
                     </tr>
                   ))}
@@ -259,8 +339,9 @@ export default function Prescriptions() {
               </button>
               <button
                 onClick={handleGenerateBill}
-                disabled={generating || total <= 0}
-                className="btn-success flex-1 flex items-center justify-center gap-2 py-2.5 text-sm"
+                disabled={generating || total <= 0 || dispenseData.some(m => m.stock < m.qty_dispensed)}
+                className="btn-success flex-1 flex items-center justify-center gap-2 py-2.5 text-sm disabled:opacity-50"
+                title={dispenseData.some(m => m.stock < m.qty_dispensed) ? "Cannot bill. Insufficient stock." : ""}
               >
                 {generating ? (
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />

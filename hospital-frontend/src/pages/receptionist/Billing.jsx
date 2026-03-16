@@ -7,23 +7,32 @@ import { CreditCard, CheckCircle, Calculator } from 'lucide-react';
 
 export default function BillingPage() {
   const [appointments, setAppointments] = useState([]);
+  const [adminFee, setAdminFee] = useState(0); 
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState(null);
   
+  const [selected, setSelected] = useState(null);
   const [billForm, setBillForm] = useState({
     consultation_fee: 0,
-    lab_charges: 0,
-    medicine_charges: 0,
-    other_charges: 0
+    lab_charges: 0
   });
   const [generating, setGenerating] = useState(false);
 
   const fetchData = async () => {
     try {
-      const res = await api.get('/receptionist/completed-appointments');
-      setAppointments(res.data || []);
+      const [feeRes, apptRes] = await Promise.allSettled([
+        api.get('/receptionist/consultation-fee'), 
+        api.get('/receptionist/completed-appointments')
+      ]);
+
+      if (feeRes.status === 'fulfilled') {
+        setAdminFee(feeRes.value.data?.fee || 0); 
+      }
+
+      if (apptRes.status === 'fulfilled') {
+        setAppointments(apptRes.value.data || []);
+      }
     } catch { 
-      toast.error('Failed to load completed appointments'); 
+      toast.error('Failed to load billing data'); 
     } finally { 
       setLoading(false); 
     }
@@ -31,19 +40,14 @@ export default function BillingPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const total = 
-    Number(billForm.consultation_fee) + 
-    Number(billForm.lab_charges) + 
-    Number(billForm.medicine_charges) + 
-    Number(billForm.other_charges);
+  // Calculate total strictly from Consult + Lab
+  const total = Number(billForm.consultation_fee) + Number(billForm.lab_charges);
 
   const openGenerateModal = (appt) => {
     setSelected(appt);
     setBillForm({
-      consultation_fee: Number(appt.consultation_fee) || 0,
-      lab_charges: Number(appt.lab_charges) || 0,
-      medicine_charges: Number(appt.medicine_charges) || 0,
-      other_charges: 0 
+      consultation_fee: Number(adminFee) || 0, 
+      lab_charges: Number(appt.lab_charges) || 0
     });
   };
 
@@ -59,13 +63,11 @@ export default function BillingPage() {
         patient_id: selected.patient_id,
         consultation_fee: billForm.consultation_fee,
         lab_charges: billForm.lab_charges,
-        medicine_charges: billForm.medicine_charges,
-        other_charges: billForm.other_charges,
         total_amount: total,
       });
       toast.success('Master Bill generated successfully!');
       setSelected(null);
-      fetchData(); // Refreshes the table so it immediately shows "Completed"
+      fetchData(); 
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to generate bill');
     } finally {
@@ -102,9 +104,8 @@ export default function BillingPage() {
                   const actualId = appt.appointment_id || appt._id || appt.id;
                   
                   const previewTotal = 
-                    (Number(appt.consultation_fee) || 0) + 
-                    (Number(appt.lab_charges) || 0) + 
-                    (Number(appt.medicine_charges) || 0);
+                    (Number(adminFee) || 0) + 
+                    (Number(appt.lab_charges) || 0);
 
                   return (
                     <tr key={actualId} className="hover:bg-gray-50 transition-colors">
@@ -120,6 +121,7 @@ export default function BillingPage() {
                         <StatusBadge status={appt.billing_status || 'not_generated'} />
                       </td>
                       <td className="flex items-center gap-2">
+                        
                         {/* GENERATE BILL BUTTON */}
                         {(!appt.billing_status || appt.billing_status === 'not_generated') && (
                           <button
@@ -130,8 +132,8 @@ export default function BillingPage() {
                           </button>
                         )}
                         
-                        {/* COMPLETED STATE (Replaces the Mark Paid Button) */}
-                        {appt.billing_status === 'generated' && (
+                        {/* COMPLETED STATE (No Eye Button) */}
+                        {(appt.billing_status === 'generated' || appt.billing_status === 'paid') && (
                            <span className="text-gray-400 text-xs italic font-medium flex items-center gap-1">
                              <CheckCircle size={12} className="text-green-500" /> Completed
                            </span>
@@ -163,7 +165,6 @@ export default function BillingPage() {
               {[
                 { key: 'consultation_fee', label: 'Consultation Fee' },
                 { key: 'lab_charges', label: 'Laboratory Charges' },
-                { key: 'medicine_charges', label: 'Pharmacy Charges' },
               ].map(({ key, label }) => (
                 <div key={key} className="flex items-center justify-between">
                   <label className="text-sm font-medium text-gray-600">{label}</label>
@@ -178,21 +179,6 @@ export default function BillingPage() {
                   </div>
                 </div>
               ))}
-              
-              <div className="border-t border-gray-100 pt-3 mt-3 flex items-center justify-between">
-                <label className="text-sm font-medium text-gray-600">Other / Misc Charges</label>
-                <div className="relative w-32">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">₹</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="w-full bg-white border border-gray-300 text-gray-900 rounded-lg pl-8 pr-3 py-1.5 text-sm font-bold focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-                    value={billForm.other_charges}
-                    onChange={e => setBillForm({ ...billForm, other_charges: e.target.value })}
-                  />
-                </div>
-              </div>
             </div>
 
             <div className="flex items-center justify-between p-4 bg-gray-900 rounded-xl">
@@ -214,6 +200,7 @@ export default function BillingPage() {
           </div>
         )}
       </Modal>
+
     </div>
   );
 }

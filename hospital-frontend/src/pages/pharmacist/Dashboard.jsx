@@ -104,7 +104,7 @@ export default function PharmacistDashboard() {
                         {med.stock}
                       </span>
                     </td>
-                    <td>{formatCurrency(med.unit_price)}</td>
+                    <td>{formatCurrency(med.price)}</td>
                     <td>
                       {med.stock <= (med.minimum_threshold || 10) ? (
                         <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Low Stock</span>

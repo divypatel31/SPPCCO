@@ -29,14 +29,37 @@ exports.getProfile = async (req, res) => {
   }
 };
 
-
-
 /* UPDATE PROFILE */
 exports.updateProfile = async (req, res) => {
   try {
     const { full_name, phone, dob, gender, blood_group, address } = req.body;
-
     const userId = req.user.id;
+
+    // 🛡️ VALIDATION 1: Full Name must be letters and spaces ONLY
+    if (full_name) {
+      const nameRegex = /^[A-Za-z\s]+$/;
+      if (!nameRegex.test(full_name)) {
+        return res.status(400).json({ message: "Full Name can only contain letters and spaces." });
+      }
+    }
+
+    // 🛡️ VALIDATION 2: Phone must be exactly 10 digits
+    if (phone) {
+      const phoneRegex = /^[0-9]{10}$/;
+      if (!phoneRegex.test(phone)) {
+        return res.status(400).json({ message: "Phone number must be exactly 10 digits." });
+      }
+    }
+
+    // 🛡️ VALIDATION 3: Date of Birth cannot be a future date
+    if (dob) {
+      const selectedDate = new Date(dob);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Strip time for accurate comparison
+      if (selectedDate > today) {
+        return res.status(400).json({ message: "Date of Birth cannot be in the future." });
+      }
+    }
 
     await db.execute(
       `UPDATE users 
@@ -51,7 +74,7 @@ exports.updateProfile = async (req, res) => {
       [
         full_name || null,
         phone || null,
-        dob || null,            // ✅ FIX HERE
+        dob || null,
         gender || null,
         blood_group || null,
         address || null,
@@ -89,8 +112,9 @@ exports.addWalletBalance = async (req, res) => {
     const { amount } = req.body;
     const topUpAmount = Number(amount);
 
+    // 🛡️ VALIDATION 4: Prevent negative or zero top-ups
     if (!topUpAmount || topUpAmount <= 0) {
-      return res.status(400).json({ message: "Please enter a valid amount" });
+      return res.status(400).json({ message: "Top-up amount must be a positive number greater than ₹0." });
     }
 
     await db.execute(
@@ -106,41 +130,44 @@ exports.addWalletBalance = async (req, res) => {
   }
 };
 
-/* ==============================
-   GET PATIENT PRESCRIPTIONS
-================================= */
+/* =========================================
+   GET MY PRESCRIPTIONS (PATIENT)
+========================================= */
 exports.getMyPrescriptions = async (req, res) => {
   try {
-    const patient_id = req.user.id;
-    
-    // 1. Fetch the main prescription records
-    const [prescriptions] = await db.execute(`
-      SELECT p.prescription_id, p.created_at, u.full_name as doctor_name
-      FROM prescriptions p
-      JOIN users u ON p.doctor_id = u.user_id
-      WHERE p.patient_id = ?
-      ORDER BY p.created_at DESC
-    `, [patient_id]);
+    const patient_id = req.user.id; 
 
-    // 2. Fetch the specific medicines for each prescription
+    // 🔥 FIXED: Changed 'd.id' to 'd.user_id' in the JOIN clause
+    const [prescriptions] = await db.execute(
+      `SELECT p.prescription_id, p.created_at,
+              d.full_name as doctor_name
+       FROM prescriptions p
+       LEFT JOIN users d ON p.doctor_id = d.user_id
+       WHERE p.patient_id = ?
+       ORDER BY p.created_at DESC`,
+      [patient_id]
+    );
+
+    // Fetch the detailed medicine items for each prescription
     for (let presc of prescriptions) {
-      const [medicines] = await db.execute(`
-        SELECT pi.dosage, pi.frequency, pi.duration, pi.instructions,
-               pi.morning, pi.afternoon, pi.evening, pi.night, pi.food_timing,
-               m.name as medicine_name
-        FROM prescription_items pi
-        JOIN medicines m ON pi.medicine_id = m.medicine_id
-        WHERE pi.prescription_id = ?
-      `, [presc.prescription_id]);
+      const [items] = await db.execute(
+        `SELECT pi.dose, pi.unit, pi.frequency, pi.duration, pi.instructions,
+                pi.morning, pi.afternoon, pi.evening, pi.night, pi.food_timing,
+                m.name as medicine_name, m.form, m.dispense_type, m.pack_size
+         FROM prescription_items pi
+         JOIN medicines m ON pi.medicine_id = m.medicine_id
+         WHERE pi.prescription_id = ?`,
+        [presc.prescription_id]
+      );
       
-      presc.medicines = medicines;
+      presc.medicines = items;
     }
 
     res.json(prescriptions);
 
-  } catch (err) {
-    console.error("GET PRESCRIPTIONS ERROR:", err);
-    res.status(500).json({ message: "Failed to load prescriptions" });
+  } catch (error) {
+    console.error("GET PRESCRIPTIONS ERROR:", error);
+    res.status(500).json({ message: "Failed to fetch prescriptions" });
   }
 };
 

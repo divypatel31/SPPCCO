@@ -94,3 +94,30 @@ exports.getActiveDepartments = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// DELETE DEPARTMENT
+exports.deleteDepartment = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [result] = await db.execute(
+      "DELETE FROM departments WHERE department_id = ?",
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    res.json({ message: "Department deleted successfully" });
+
+  } catch (error) {
+    // 🔥 Database safety check: if doctors/tests belong to this department
+    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+      return res.status(400).json({ 
+        message: "Cannot delete! This department is currently linked to existing doctors or lab tests." 
+      });
+    }
+    res.status(500).json({ error: error.message });
+  }
+};

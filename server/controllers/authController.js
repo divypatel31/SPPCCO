@@ -3,6 +3,10 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const sendEmail = require('../utils/sendEmail');
 
+// 🔥 STRONG PASSWORD REGEX & MESSAGE
+const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/;
+const weakPasswordMsg = "Password is weak! It must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character (e.g., @$!%*?&).";
+
 /* =========================
    REGISTER USER (ANY ROLE)
 ========================= */
@@ -10,8 +14,32 @@ exports.register = async (req, res) => {
   try {
     const { name, email, phone, password, role } = req.body;
 
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: "Full name, email and password are required" });
+    // 🛡️ 1. Required Fields Check
+    if (!name || !email || !password || !phone) {
+      return res.status(400).json({ message: "Full name, email, phone, and password are required" });
+    }
+
+    // 🛡️ 2. Name Validation: Only letters and spaces
+    const nameRegex = /^[A-Za-z\s]+$/;
+    if (!nameRegex.test(name)) {
+      return res.status(400).json({ message: "Full name can only contain letters and spaces" });
+    }
+
+    // 🛡️ 3. Email Validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Please enter a valid email address" });
+    }
+
+    // 🛡️ 4. Phone Validation: Exactly 10 digits
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({ message: "Phone number must be exactly 10 digits" });
+    }
+
+    // 🛡️ 5. STRONG PASSWORD VALIDATION
+    if (!strongPasswordRegex.test(password)) {
+      return res.status(400).json({ message: weakPasswordMsg });
     }
 
     // Check existing email
@@ -29,19 +57,16 @@ exports.register = async (req, res) => {
 
     // Default role = patient
     const userRole = role || "patient";
-    const phoneValue = phone || null;
 
     await db.execute(
       `INSERT INTO users 
       (full_name, email, phone, password_hash, role, status, created_by)
       VALUES (?, ?, ?, ?, ?, 'active', 'self')`,
-      [name, email, phoneValue, hashedPassword, userRole]
+      [name, email, phone, hashedPassword, userRole]
     );
 
-
-
     res.status(201).json({
-      message: `${userRole} registered successfully`
+      message: `${userRole.charAt(0).toUpperCase() + userRole.slice(1)} registered successfully`
     });
 
   } catch (err) {
@@ -49,7 +74,6 @@ exports.register = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
-
 
 /* =========================
    LOGIN
@@ -62,13 +86,18 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Email and password required" });
     }
 
+    // 🔥 NEW: Prevent database crashes from extremely long inputs
+    if (email.length > 255 || password.length > 255) {
+      return res.status(400).json({ message: "Invalid input length. Please try again." });
+    }
+
     const [rows] = await db.execute(
       "SELECT * FROM users WHERE email = ?",
       [email]
     );
 
     if (rows.length === 0) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      return res.status(401).json({ message: "Wrong email entered. User not found." });
     }
 
     const user = rows[0];
@@ -80,7 +109,17 @@ exports.login = async (req, res) => {
     const match = await bcrypt.compare(password, user.password_hash);
 
     if (!match) {
-      return res.status(401).json({ message: "Incorrect password" });
+      return res.status(401).json({ message: "Wrong password entered. Please try again." });
+    }
+
+    // First time login check
+    if (password === user.phone && user.role === 'patient') {
+      return res.status(200).json({
+        requirePasswordChange: true,
+        user_id: user.user_id,
+        phone: user.phone,
+        message: "First time login: Please set a secure password."
+      });
     }
 
     const token = jwt.sign(
@@ -101,10 +140,14 @@ exports.login = async (req, res) => {
 
   } catch (err) {
     console.error("LOGIN ERROR:", err);
-    res.status(500).json({ error: err.message });
+    // 🔥 FIXED: Changed 'error' to 'message' so the frontend can read it!
+    res.status(500).json({ message: "Server error during login. Please try again." });
   }
 };
 
+/* =========================
+   CHANGE PASSWORD
+========================= */
 exports.changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -112,6 +155,18 @@ exports.changePassword = async (req, res) => {
 
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ message: "Please provide current and new password" });
+    }
+
+    // 🔥 THE NEW CHECK: Prevent using the same password
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ 
+        message: "Your new password cannot be the same as your old password. Please enter a different one." 
+      });
+    }
+
+    // 🛡️ STRONG PASSWORD VALIDATION
+    if (!strongPasswordRegex.test(newPassword)) {
+      return res.status(400).json({ message: weakPasswordMsg });
     }
 
     // 1. Fetch user's current hashed password
@@ -142,6 +197,45 @@ exports.changePassword = async (req, res) => {
   }
 };
 
+/* =========================================
+   FORCE CHANGE PASSWORD (First Time Login)
+========================================= */
+exports.forceChangePassword = async (req, res) => {
+  try {
+    const { user_id, new_password } = req.body;
+
+    if (!user_id || !new_password) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    // 🛡️ STRONG PASSWORD VALIDATION
+    if (!strongPasswordRegex.test(new_password)) {
+      return res.status(400).json({ message: weakPasswordMsg });
+    }
+
+    // Hash the new secure password
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+
+    // Update the database
+    const [result] = await db.execute(
+      `UPDATE users SET password_hash = ? WHERE user_id = ?`,
+      [hashedPassword, user_id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({ message: "Password updated successfully! You can now log in." });
+  } catch (error) {
+    console.error("FORCE CHANGE PWD ERROR:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/* =========================
+   GET MY PROFILE
+========================= */
 exports.getMyProfile = async (req, res) => {
   try {
     const [rows] = await db.execute(
@@ -162,8 +256,6 @@ exports.getMyProfile = async (req, res) => {
   }
 };
 
-// ... [Your existing login, register, getMyProfile, changePassword code] ...
-
 /* =========================================
    FORGOT PASSWORD: Send OTP to Email
 ========================================= */
@@ -171,32 +263,28 @@ exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    // 1. Check if user exists
     const [users] = await db.execute("SELECT * FROM users WHERE email = ?", [email]);
     if (users.length === 0) {
       return res.status(404).json({ message: "No account found with this email" });
     }
 
-    // 2. Generate 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    
-    // 3. Set expiry to 15 minutes from now
     const expiry = new Date(Date.now() + 15 * 60 * 1000);
 
-    // 4. Save OTP to database
     await db.execute(
       "UPDATE users SET reset_otp = ?, otp_expiry = ? WHERE email = ?",
       [otp, expiry, email]
     );
 
-    // 5. Send Email
     const message = `Your password reset OTP is: ${otp}\nThis code is valid for 15 minutes.\nIf you did not request this, please ignore this email.`;
     
-    await sendEmail({
+    const uniqueSubject = `Password Reset OTP - MediCare HMS (${new Date().toLocaleTimeString()})`;
+
+    sendEmail({
       to: email,
-      subject: 'Password Reset OTP - MediCare HMS',
+      subject: uniqueSubject,
       text: message
-    });
+    }).catch(err => console.error("Background Email Error:", err));
 
     res.json({ message: "OTP sent to email successfully" });
 
@@ -242,6 +330,11 @@ exports.verifyOtp = async (req, res) => {
 exports.resetPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
+
+    // 🛡️ STRONG PASSWORD VALIDATION
+    if (!strongPasswordRegex.test(newPassword)) {
+      return res.status(400).json({ message: weakPasswordMsg });
+    }
 
     // 1. Verify OTP one last time for security
     const [users] = await db.execute(

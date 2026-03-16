@@ -22,6 +22,8 @@ export default function RegisterPage() {
 
   const [loading, setLoading] = useState(false);
 
+  const todayDate = new Date().toISOString().split('T')[0];
+
   const handleChange = (e) => {
     setForm(prev => ({
       ...prev,
@@ -32,13 +34,26 @@ export default function RegisterPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!form.password || form.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    // 🔥 VALIDATION 1: Phone number exactly 10 digits
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!phoneRegex.test(form.phone)) {
+      toast.error('Phone number must be exactly 10 digits');
+      document.getElementsByName('phone')[0]?.focus(); // Cursor jumps to Phone
       return;
     }
 
+    // 🔥 VALIDATION 2: Strong Password Check
+    const strongPwdRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/;
+    if (!strongPwdRegex.test(form.password)) {
+      toast.error('Password is weak! Needs 8+ chars, upper, lower, number & symbol (@$!%*?&#)');
+      document.getElementsByName('password')[0]?.focus(); // Cursor jumps to Password
+      return;
+    }
+
+    // 🔥 VALIDATION 3: Passwords must match
     if (form.password !== form.confirmPassword) {
       toast.error('Passwords do not match');
+      document.getElementsByName('confirmPassword')[0]?.focus(); // Cursor jumps to Confirm Password
       return;
     }
 
@@ -76,8 +91,6 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-[#F1F5F9] font-sans overflow-x-hidden relative flex items-center justify-center p-6">
-
-      {/* Background */}
       <div className="absolute inset-0 z-0">
         <div
           className="absolute inset-0 opacity-[0.1]"
@@ -94,8 +107,6 @@ export default function RegisterPage() {
       </div>
 
       <div className="w-full max-w-3xl relative z-10">
-
-        {/* Branding */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -115,7 +126,6 @@ export default function RegisterPage() {
           transition={{ duration: 0.8 }}
           className="bg-white/80 backdrop-blur-2xl rounded-[2.5rem] border border-white p-8 lg:p-12 shadow-xl"
         >
-          {/* Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-10 gap-4">
             <div className="flex items-center gap-4">
               <Link
@@ -138,7 +148,6 @@ export default function RegisterPage() {
             </div>
           </div>
 
-          {/* Form */}
           <form onSubmit={handleSubmit}>
             <motion.div
               variants={containerVariants}
@@ -181,9 +190,16 @@ export default function RegisterPage() {
                       name={field.name}
                       type={field.type}
                       value={form[field.name]}
-                      onChange={handleChange}
+                      // For phone, only allow numbers
+                      onChange={e => {
+                        if (field.name === 'phone') {
+                          e.target.value = e.target.value.replace(/\D/g, '');
+                        }
+                        handleChange(e);
+                      }}
                       placeholder={field.placeholder}
                       required={!field.optional}
+                      max={field.type === 'date' ? todayDate : undefined}
                       className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-blue-500 outline-none text-slate-800 placeholder-slate-300"
                     />
                   )}
@@ -217,7 +233,6 @@ export default function RegisterPage() {
               Already have a profile? Sign In
             </Link>
           </div>
-
         </motion.div>
       </div>
     </div>

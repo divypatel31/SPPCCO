@@ -19,19 +19,17 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = async (email, password) => {
-    const res = await api.post('/auth/login', { email, password });
-    const { token, user } = res.data;
+  // 🔥 CHANGED: Now it just accepts the data we already fetched in LoginPage!
+  const login = (userData) => {
+    const { token, user: userDetails } = userData;
 
     const formattedUser = {
-      ...user,
+      ...userDetails,
       token
     };
 
     setUser(formattedUser);
     localStorage.setItem('hms_user', JSON.stringify(formattedUser));
-
-    return formattedUser;
   };
 
   const register = async (formData) => {

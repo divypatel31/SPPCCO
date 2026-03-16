@@ -24,10 +24,14 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
+    // 🔥 THE FIX: Only force a redirect if the error is 401 AND the request was NOT for the login route!
+    const isLoginRequest = err.config && err.config.url && err.config.url.includes('/auth/login');
+    
+    if (err.response?.status === 401 && !isLoginRequest) {
       localStorage.removeItem('hms_user');
       window.location.href = '/login';
     }
+    
     return Promise.reject(err);
   }
 );

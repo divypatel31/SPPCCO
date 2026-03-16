@@ -21,16 +21,33 @@ export default function DoctorDashboard() {
 
   if (loading) return <Spinner />;
 
-  const today = new Date().toISOString().split('T')[0];
+  // 🔥 FIX 1: Robust 'isToday' function to prevent UTC timezone string bugs
+  const isToday = (dateString) => {
+    if (!dateString) return false;
+    const d = new Date(dateString);
+    const todayObj = new Date();
+    return d.getDate() === todayObj.getDate() &&
+           d.getMonth() === todayObj.getMonth() &&
+           d.getFullYear() === todayObj.getFullYear();
+  };
   
   // Filter for today's active schedule
-  const todayAppts = appointments.filter(a => {
-    const d = a.appointment_date || a.date || '';
-    return d.startsWith(today) && ['scheduled', 'arrived', 'in_consultation'].includes(a.status);
-  });
+  const todayAppts = appointments.filter(a => 
+    isToday(a.appointment_date || a.date) && 
+    ['scheduled', 'arrived', 'in_consultation'].includes(a.status)
+  );
 
-  const pending = appointments.filter(a => a.status === 'arrived');
-  const completed = appointments.filter(a => a.status === 'completed');
+  // Filter for patients waiting TODAY
+  const pending = appointments.filter(a => 
+    isToday(a.appointment_date || a.date) && 
+    a.status === 'arrived'
+  );
+
+  // Filter for completed TODAY
+  const completedToday = appointments.filter(a => 
+    isToday(a.appointment_date || a.date) && 
+    a.status === 'completed'
+  );
 
   return (
     <div>
@@ -46,7 +63,7 @@ export default function DoctorDashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard icon={Calendar} label="Today's Appointments" value={todayAppts.length} color="teal" />
         <StatCard icon={Users} label="Patients Waiting" value={pending.length} color="orange" />
-        <StatCard icon={CheckCircle} label="Completed Today" value={completed.filter(a => (a.appointment_date || '').startsWith(today)).length} color="green" />
+        <StatCard icon={CheckCircle} label="Completed Today" value={completedToday.length} color="green" />
         <StatCard icon={Clock} label="Total Appointments" value={appointments.length} color="blue" />
       </div>
 
@@ -68,10 +85,12 @@ export default function DoctorDashboard() {
         ) : (
           <div className="space-y-3">
             {todayAppts
-              .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''))
+              // 🔥 FIX 2: Added appointment_time fallback for proper sorting
+              .sort((a, b) => (a.appointment_time || a.start_time || '').localeCompare(b.appointment_time || b.start_time || ''))
               .map(appt => {
-                // 🔥 FIX: Correct ID mapping for MySQL compatibility
                 const actualId = appt.appointment_id || appt.id || appt._id;
+                // 🔥 FIX 3: Extracted correct time variable
+                const time = appt.appointment_time || appt.start_time;
 
                 return (
                   <div 
@@ -81,7 +100,7 @@ export default function DoctorDashboard() {
                     <div className="flex items-center gap-4">
                       <div className="text-center min-w-[70px] bg-white p-2 rounded-lg shadow-sm">
                         <p className="text-[10px] uppercase tracking-wider text-gray-400 font-bold">Start</p>
-                        <p className="text-sm font-bold text-teal-700">{formatTime(appt.start_time)}</p>
+                        <p className="text-sm font-bold text-teal-700">{formatTime(time)}</p>
                       </div>
                       <div>
                         <p className="font-bold text-gray-900">{appt.patient_name || 'Patient'}</p>
@@ -92,7 +111,6 @@ export default function DoctorDashboard() {
                     <div className="flex items-center gap-4">
                       <StatusBadge status={appt.status} />
                       
-                      {/* 🔥 FIX: Link now points to the correct ID */}
                       {['arrived', 'in_consultation'].includes(appt.status) && (
                         <Link
                           to={`/doctor/consultation/${actualId}`}

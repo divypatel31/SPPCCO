@@ -5,13 +5,14 @@ import {
   LayoutDashboard, Calendar, User, FileText, CreditCard,
   Users, Settings, LogOut, Menu, X, FlaskConical,
   Stethoscope, Activity, Package, TrendingUp, ClipboardList,
-  UserPlus, Clock, Pill, Building2, BarChart3, Bell, Phone
+  UserPlus, Clock, Pill, Building2, BarChart3, Bell, Phone, Bot
 } from 'lucide-react';
 
 const NAV_ITEMS = {
   patient: [
     { to: '/patient/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/patient/book-appointment', icon: Calendar, label: 'Book Appointment' },
+    { to: '/patient/ai-assistant', icon: Bot, label: 'AI Assistant' },
     { to: '/patient/appointments', icon: ClipboardList, label: 'My Appointments' },
     { to: '/patient/prescriptions', icon: Pill, label: 'Prescriptions' },
     { to: '/patient/bills', icon: CreditCard, label: 'My Bills' },
@@ -21,6 +22,7 @@ const NAV_ITEMS = {
   doctor: [
     { to: '/doctor/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/doctor/appointments', icon: Calendar, label: 'Appointments' },
+    { to: '/doctor/schedule', icon: Calendar, label: 'My Schedule' },
     { to: '/doctor/profile', icon: User, label: 'Profile' },
     { to: '/doctor/contact', icon: Phone, label: 'Contact' },
   ],
@@ -30,8 +32,10 @@ const NAV_ITEMS = {
     { to: '/receptionist/queue', icon: Users, label: "Appointment" },
     { to: '/receptionist/billing', icon: CreditCard, label: 'Billing' },
     { to: '/receptionist/register-patient', icon: UserPlus, label: 'Register Patient' },
+    { to: '/receptionist/schedules', icon: Calendar, label: 'Doctor Schedules' },
     { to: '/receptionist/profile', icon: User, label: 'Profile' },
     { to: '/receptionist/contact', icon: Phone, label: 'Contact' },
+
   ],
   lab: [
     { to: '/lab/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -48,7 +52,7 @@ const NAV_ITEMS = {
   ],
   admin: [
     { to: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/admin/users', icon: Users, label: 'User Management' }, 
+    { to: '/admin/users', icon: Users, label: 'User Management' },
     { to: '/admin/departments', icon: Building2, label: 'Departments' },
     { to: '/admin/lab-tests', icon: FlaskConical, label: 'Lab Tests' },
     { to: '/admin/medicines', icon: Package, label: 'Medicine Master' },
@@ -124,10 +128,9 @@ export default function DashboardLayout({ role }) {
             to={to}
             onClick={() => setSidebarOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
-                isActive
-                  ? `${colors.bg} text-white shadow-sm`
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${isActive
+                ? `${colors.bg} text-white shadow-sm`
+                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
               }`
             }
           >

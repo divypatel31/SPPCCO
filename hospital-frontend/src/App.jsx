@@ -14,11 +14,13 @@ import BookAppointment from './pages/patient/BookAppointment';
 import MyAppointments from './pages/patient/MyAppointments';
 import MyBills from './pages/patient/MyBills';
 import MyPrescriptions from './pages/patient/MyPrescriptions';
+import AIAssistant from './pages/patient/AIAssistant';
 
 // Doctor Pages
 import DoctorDashboard from './pages/doctor/Dashboard';
 import DoctorAppointments from './pages/doctor/Appointments';
 import ConsultationPage from './pages/doctor/Consultation';
+import MySchedule from './pages/doctor/MySchedule';
 
 // Receptionist Pages
 import ReceptionistDashboard from './pages/receptionist/Dashboard';
@@ -26,6 +28,7 @@ import PendingAppointments from './pages/receptionist/PendingAppointments';
 import TodayQueue from './pages/receptionist/TodayQueue';
 import BillingPage from './pages/receptionist/Billing';
 import RegisterPatient from './pages/receptionist/RegisterPatient';
+import DoctorSchedules from './pages/receptionist/DoctorSchedules';
 
 // Lab Pages
 import LabDashboard from './pages/lab/Dashboard';
@@ -111,10 +114,11 @@ function App() {
             <Route path="dashboard" element={<PatientDashboard />} />
             <Route path="profile" element={<PatientProfile />} />
             <Route path="book-appointment" element={<BookAppointment />} />
+            <Route path="ai-assistant" element={<AIAssistant />} /> {/* 🔥 NEW AI ROUTE */}
             <Route path="appointments" element={<MyAppointments />} />
             <Route path="bills" element={<MyBills />} />
             <Route path="prescriptions" element={<MyPrescriptions />} />
-            <Route path="contact" element={<Contact />} /> {/* Fixed syntax */}
+            <Route path="contact" element={<Contact />} />
           </Route>
 
           {/* Doctor Routes */}
@@ -126,8 +130,9 @@ function App() {
             <Route path="dashboard" element={<DoctorDashboard />} />
             <Route path="appointments" element={<DoctorAppointments />} />
             <Route path="consultation/:id" element={<ConsultationPage />} />
-            <Route path="profile" element={<StaffProfile />} /> {/* Fixed syntax */}
-            <Route path="contact" element={<Contact />} /> {/* Added */}
+            <Route path="schedule" element={<MySchedule />} />
+            <Route path="profile" element={<StaffProfile />} />
+            <Route path="contact" element={<Contact />} />
           </Route>
 
           {/* Receptionist Routes */}
@@ -141,8 +146,9 @@ function App() {
             <Route path="queue" element={<TodayQueue />} />
             <Route path="billing" element={<BillingPage />} />
             <Route path="register-patient" element={<RegisterPatient />} />
-            <Route path="profile" element={<StaffProfile />} /> {/* Added */}
-            <Route path="contact" element={<Contact />} /> {/* Added */}
+            <Route path="profile" element={<StaffProfile />} />
+            <Route path="contact" element={<Contact />} />
+            <Route path="schedules" element={<DoctorSchedules />} />
           </Route>
 
           {/* Lab Routes */}
@@ -153,8 +159,8 @@ function App() {
           }>
             <Route path="dashboard" element={<LabDashboard />} />
             <Route path="requests" element={<LabRequests />} />
-            <Route path="profile" element={<StaffProfile />} /> {/* Added */}
-            <Route path="contact" element={<Contact />} /> {/* Added */}
+            <Route path="profile" element={<StaffProfile />} />
+            <Route path="contact" element={<Contact />} />
           </Route>
 
           {/* Pharmacist Routes */}
@@ -166,8 +172,8 @@ function App() {
             <Route path="dashboard" element={<PharmacistDashboard />} />
             <Route path="prescriptions" element={<Prescriptions />} />
             <Route path="bills" element={<PharmacyBills />} />
-            <Route path="profile" element={<StaffProfile />} /> {/* Added */}
-            <Route path="contact" element={<Contact />} /> {/* Added */}
+            <Route path="profile" element={<StaffProfile />} />
+            <Route path="contact" element={<Contact />} />
           </Route>
 
           {/* Admin Routes */}
@@ -183,8 +189,8 @@ function App() {
             <Route path="medicines" element={<MedicineManagement />} />
             <Route path="revenue" element={<RevenueAnalytics />} />
             <Route path="system-settings" element={<SystemSettings />} />
-            <Route path="profile" element={<StaffProfile />} /> {/* Fixed syntax */}
-            <Route path="contact" element={<Contact />} /> {/* Fixed syntax */}
+            <Route path="profile" element={<StaffProfile />} />
+            <Route path="contact" element={<Contact />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

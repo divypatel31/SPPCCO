@@ -14,5 +14,6 @@ router.post("/change-password", verifyToken, auth.changePassword);
 router.post("/forgot-password", auth.forgotPassword);
 router.post("/verify-otp", auth.verifyOtp);
 router.post("/reset-password", auth.resetPassword);
+router.post('/force-change-password', auth.forceChangePassword);
 
 module.exports = router;

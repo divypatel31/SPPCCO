@@ -1,15 +1,16 @@
 import React from 'react';
 import { PageHeader } from '../../components/common';
-import { Phone, Mail, MapPin, Clock, ShieldAlert } from 'lucide-react';
+import { Phone, Mail, MapPin, Clock } from 'lucide-react';
 
 export default function Contact() {
   return (
     <div>
       <PageHeader title="Contact Directory" subtitle="Important contacts and support details" />
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      {/* Changed to a 2-column grid for a balanced look without the emergency card */}
+      <div className="grid lg:grid-cols-2 gap-6">
         
-        {/* Main Hospital Contact */}
+        {/* Main Hospital Contact - Takes up full width on top */}
         <div className="card lg:col-span-2 bg-blue-50 border-blue-100">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-3 bg-blue-600 text-white rounded-lg">
@@ -40,20 +41,8 @@ export default function Contact() {
           </div>
         </div>
 
-        {/* Emergency Contact */}
-        <div className="card bg-red-50 border-red-100 flex flex-col justify-center items-center text-center">
-          <ShieldAlert size={48} className="text-red-500 mb-4" />
-          <h3 className="text-lg font-bold text-red-900">Emergency Response</h3>
-          <p className="text-sm text-red-700 mt-2 mb-4">
-            For critical medical emergencies requiring immediate assistance.
-          </p>
-          <a href="tel:911" className="bg-red-600 text-white px-6 py-2 rounded-lg font-bold hover:bg-red-700 transition">
-            Call Emergency Desk
-          </a>
-        </div>
-
-        {/* Internal Departments */}
-        <div className="card">
+        {/* Internal Departments - Left Side */}
+        <div className="card h-full">
           <div className="flex items-center gap-2 mb-4">
             <Phone className="text-blue-600" size={20} />
             <h3 className="font-semibold text-gray-900">Department Extensions</h3>
@@ -78,18 +67,18 @@ export default function Contact() {
           </ul>
         </div>
 
-        {/* IT Support (Good for Staff) */}
-        <div className="card">
+        {/* IT Support - Right Side */}
+        <div className="card h-full flex flex-col">
           <div className="flex items-center gap-2 mb-4">
             <Mail className="text-blue-600" size={20} />
             <h3 className="font-semibold text-gray-900">IT & System Support</h3>
           </div>
-          <p className="text-sm text-gray-600 mb-4">
-            Having trouble logging in, generating bills, or finding patient records? Contact the IT administration team.
+          <p className="text-sm text-gray-600 mb-6 flex-grow">
+            Having trouble logging in, generating bills, or finding patient records? Contact the IT administration team for system access recovery.
           </p>
-          <div className="bg-gray-50 p-3 rounded text-sm text-gray-800 border border-gray-100">
-            <strong>Email:</strong> it-support@medicare-hms.com <br/>
-            <strong>Response Time:</strong> Within 2 hours
+          <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-800 border border-gray-100">
+            <div className="mb-2"><strong>Email:</strong> support@medicare.com</div>
+            <div><strong>Response Time:</strong> Within 2 hours</div>
           </div>
         </div>
 

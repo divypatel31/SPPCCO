@@ -147,6 +147,22 @@ exports.updateUser = async (req, res) => {
     const { full_name, email, phone, department } = req.body;
     const userId = req.params.id;
 
+    // 🛡️ VALIDATION 1: Name must be letters and spaces only
+    if (full_name) {
+      const nameRegex = /^[A-Za-z\s]+$/;
+      if (!nameRegex.test(full_name)) {
+        return res.status(400).json({ message: "Full Name can only contain letters and spaces." });
+      }
+    }
+
+    // 🛡️ VALIDATION 2: Phone must be 10 digits
+    if (phone) {
+      const phoneRegex = /^[0-9]{10}$/;
+      if (!phoneRegex.test(phone)) {
+        return res.status(400).json({ message: "Phone number must be exactly 10 digits." });
+      }
+    }
+
     // 🔥 Check if email exists for another user
     const [existing] = await db.execute(
       "SELECT user_id FROM users WHERE email = ? AND user_id != ?",
@@ -173,7 +189,6 @@ exports.updateUser = async (req, res) => {
     res.status(500).json({ message: "Failed to update user" });
   }
 };
-
 
 /* ACTIVATE / DEACTIVATE USER */
 exports.toggleUserStatus = async (req, res) => {
@@ -221,6 +236,14 @@ exports.createLabTest = async (req, res) => {
   try {
     const { name, department_id, price, description } = req.body;
 
+    // 🛡️ VALIDATION 3: Lab Test string and positive price
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      return res.status(400).json({ message: "Test name is required." });
+    }
+    if (Number(price) <= 0) {
+      return res.status(400).json({ message: "Test price must be greater than ₹0." });
+    }
+
     await db.query(
       "INSERT INTO lab_tests (name, department_id, price, description) VALUES (?, ?, ?, ?)",
       [name, department_id, price, description]
@@ -235,6 +258,14 @@ exports.createLabTest = async (req, res) => {
 exports.updateLabTest = async (req, res) => {
   try {
     const { name, department_id, price, description } = req.body;
+
+    // 🛡️ VALIDATION 4: Lab Test string and positive price
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      return res.status(400).json({ message: "Test name is required." });
+    }
+    if (Number(price) <= 0) {
+      return res.status(400).json({ message: "Test price must be greater than ₹0." });
+    }
 
     await db.query(
       `UPDATE lab_tests 
@@ -275,10 +306,118 @@ exports.toggleLabTestStatus = async (req, res) => {
 exports.updateConsultationFee = async (req, res) => {
   const { consultation_fee } = req.body;
 
+  // 🛡️ VALIDATION 5: Prevent negative consultation fees
+  if (Number(consultation_fee) < 0) {
+    return res.status(400).json({ message: "Consultation fee cannot be negative." });
+  }
+
   await db.query(
     "UPDATE users SET consultation_fee = ? WHERE role = 'admin'",
     [consultation_fee]
   );
 
   res.json({ message: "Consultation fee updated" });
+};
+
+/* =======================================
+   GET REVENUE BY DOCTOR (NEW)
+======================================= */
+exports.getDoctorRevenue = async (req, res) => {
+  try {
+      // 1. Get the dynamic consultation fee
+      const [adminRows] = await db.execute("SELECT consultation_fee FROM users WHERE role = 'admin' LIMIT 1");
+      const adminFee = Number(adminRows[0]?.consultation_fee) || 0;
+
+      // 2. Calculate revenue per doctor
+      const [rows] = await db.execute(`
+          SELECT 
+              u.full_name AS doctor_name,
+              COUNT(a.appointment_id) AS total_patients,
+              (COUNT(a.appointment_id) * ?) AS revenue
+          FROM users u
+          LEFT JOIN appointments a ON u.user_id = a.doctor_id 
+              AND a.status IN ('arrived', 'in_consultation', 'completed')
+          WHERE u.role = 'doctor'
+          GROUP BY u.user_id, u.full_name
+          ORDER BY revenue DESC
+      `, [adminFee]);
+
+      res.json(rows.map(r => ({
+          doctor_name: r.doctor_name,
+          total_patients: Number(r.total_patients),
+          revenue: Number(r.revenue)
+      })));
+  } catch (error) {
+      console.error("DOCTOR REVENUE ERROR:", error);
+      res.status(500).json({ message: "Failed to fetch doctor revenue" });
+  }
+};
+
+/* =======================================
+   GET CURRENT CONSULTATION FEE
+======================================= */
+exports.getConsultationFee = async (req, res) => {
+  try {
+    const [rows] = await db.execute("SELECT consultation_fee FROM users WHERE role = 'admin' LIMIT 1");
+    
+    // Return the fee, or 0 if it hasn't been set yet
+    res.json({ fee: rows[0]?.consultation_fee || 0 });
+  } catch (error) {
+    console.error("GET FEE ERROR:", error);
+    res.status(500).json({ message: "Failed to fetch current fee" });
+  }
+};
+
+// DELETE LAB TEST
+exports.deleteLabTest = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [result] = await db.execute(
+      "DELETE FROM lab_tests WHERE lab_test_id = ?", // Check your exact ID column name!
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Lab test not found" });
+    }
+
+    res.json({ message: "Lab test deleted successfully" });
+
+  } catch (error) {
+    if (error.code === 'ER_ROW_IS_REFERENCED_2') {
+      return res.status(400).json({ 
+        message: "Cannot delete! This lab test has already been prescribed to patients." 
+      });
+    }
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/* DELETE USER */
+exports.deleteUser = async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    // Prevent admin from deleting themselves (assuming ID 1 is super admin)
+    if (userId == req.user.id) {
+      return res.status(400).json({ message: "You cannot delete your own account" });
+    }
+
+    const [result] = await db.execute("DELETE FROM users WHERE user_id = ?", [userId]);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({ message: "User deleted successfully" });
+
+  } catch (err) {
+    console.error("DELETE USER ERROR:", err);
+    // 🛡️ Safety catch: If the doctor/staff has active appointments or bills tied to them, SQL will reject the delete.
+    if (err.code === 'ER_ROW_IS_REFERENCED_2' || err.code === 'ER_ROW_IS_REFERENCED') {
+      return res.status(400).json({ message: "Cannot delete user. They have active records (appointments, bills, etc.) tied to them. Please Deactivate them instead." });
+    }
+    res.status(500).json({ message: "Failed to delete user" });
+  }
 };

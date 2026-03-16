@@ -9,30 +9,60 @@ exports.addMedicine = async (req, res) => {
       unit_price,
       stock,
       minimum_threshold,
-      expiry_date
+      expiry_date,
+      form,
+      unit,
+      pack_size,
+      dispense_type
     } = req.body;
 
-    if (!medicine_name || !unit_price) {
-      return res.status(400).json({ message: "Medicine name and price required" });
+    // 🛡️ VALIDATION 1: Medicine name must be text
+    if (!medicine_name || typeof medicine_name !== 'string' || medicine_name.trim() === '') {
+      return res.status(400).json({ message: "Medicine name is required and must be text." });
+    }
+
+    // 🛡️ VALIDATION 2: Price must be a positive number greater than zero
+    if (Number(unit_price) <= 0) {
+      return res.status(400).json({ message: "Unit price must be greater than ₹0." });
+    }
+
+    // 🛡️ VALIDATION 3: Stock and thresholds cannot be negative
+    if (Number(stock) < 0 || Number(minimum_threshold) < 0) {
+      return res.status(400).json({ message: "Stock quantity and threshold cannot be negative." });
+    }
+
+    // 🛡️ VALIDATION 4: Expiry Date must not be in the past
+    if (expiry_date) {
+      const expDate = new Date(expiry_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Strip time for accurate day comparison
+      if (expDate < today) {
+        return res.status(400).json({ message: "Expiry date must be a valid future date." });
+      }
     }
 
     await db.execute(
       `INSERT INTO medicines
-       (name, category, price, stock, minimum_threshold, expiry_date)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       (name, category, price, stock, minimum_threshold, expiry_date, form, unit, pack_size, dispense_type)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         medicine_name,
         category || null,
         unit_price,
         stock || 0,
         minimum_threshold || 10,
-        expiry_date || null
+        expiry_date || null,
+        form || 'Tablet',                   // Default to Tablet
+        unit || 'mg',                       // Default to mg
+        pack_size ? Number(pack_size) : 1,  // Default to 1 pack size
+        dispense_type || 'UNIT'             // Default to UNIT
       ]
     );
 
     res.status(201).json({ message: "Medicine added successfully" });
 
   } catch (error) {
+    console.error("ADD MEDICINE ERROR:", error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -51,7 +81,7 @@ exports.getMedicines = async (req, res) => {
   }
 };
 
-/* Update Medicine */
+/* Update Medicine (🔥 FIXED: Now includes form, unit, pack_size, dispense_type) */
 exports.updateMedicine = async (req, res) => {
   try {
     const { id } = req.params;
@@ -62,12 +92,38 @@ exports.updateMedicine = async (req, res) => {
       unit_price,
       stock,
       minimum_threshold,
-      expiry_date
+      expiry_date,
+      form,
+      unit,
+      pack_size,
+      dispense_type
     } = req.body;
+
+    if (!medicine_name || typeof medicine_name !== 'string' || medicine_name.trim() === '') {
+      return res.status(400).json({ message: "Medicine name is required and must be text." });
+    }
+
+    if (Number(unit_price) <= 0) {
+      return res.status(400).json({ message: "Unit price must be greater than ₹0." });
+    }
+
+    if (Number(stock) < 0 || Number(minimum_threshold) < 0) {
+      return res.status(400).json({ message: "Stock quantity and threshold cannot be negative." });
+    }
+
+    if (expiry_date) {
+      const expDate = new Date(expiry_date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); 
+      if (expDate < today) {
+        return res.status(400).json({ message: "Expiry date must be a valid future date." });
+      }
+    }
 
     await db.execute(
       `UPDATE medicines
-       SET name = ?, category = ?, price = ?, stock = ?, minimum_threshold = ?, expiry_date = ?
+       SET name = ?, category = ?, price = ?, stock = ?, minimum_threshold = ?, expiry_date = ?,
+           form = ?, unit = ?, pack_size = ?, dispense_type = ?
        WHERE medicine_id = ?`,
       [
         medicine_name,
@@ -76,6 +132,10 @@ exports.updateMedicine = async (req, res) => {
         stock,
         minimum_threshold || 10,
         expiry_date || null,
+        form || 'Tablet',
+        unit || 'mg',
+        pack_size ? Number(pack_size) : 1,
+        dispense_type || 'UNIT',
         id
       ]
     );
@@ -83,13 +143,12 @@ exports.updateMedicine = async (req, res) => {
     res.json({ message: "Medicine updated successfully" });
 
   } catch (error) {
-    console.log(error); // 🔥 add this for debugging
+    console.error("UPDATE MEDICINE ERROR:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
-
-
+/* Sell Medicines */
 exports.sellMedicines = async (req, res) => {
   const { prescription_id, medicines } = req.body;
   const conn = await db.getConnection();
@@ -118,7 +177,7 @@ exports.sellMedicines = async (req, res) => {
 
     // 2️⃣ Pre-calculate total amount to check wallet FIRST
     let finalTotal = 0;
-    const dispenseItems = []; // Temporarily store items until we confirm wallet balance
+    const dispenseItems = []; 
 
     for (let med of medicines) {
       const requestedQty = Number(med.quantity_dispensed ?? med.quantity_required) || 0;
@@ -182,11 +241,6 @@ exports.sellMedicines = async (req, res) => {
       `, [item.dispenseQty, item.medicine_id]);
     }
 
-    // 7️⃣ Update appointment
-    await conn.execute(`
-      UPDATE appointments SET status = 'completed' WHERE appointment_id = ?
-    `, [appointment_id]);
-
     await conn.commit();
 
     res.json({
@@ -246,7 +300,6 @@ exports.getTopSellingMedicines = async (req, res) => {
   }
 };
 
-
 exports.getPendingPrescriptions = async (req, res) => {
   try {
     const [rows] = await db.execute(`
@@ -280,9 +333,6 @@ exports.cancelPrescription = async (req, res) => {
   try {
     const { id } = req.params;
     
-    // 🔥 FIXED: Since there is no 'status' column, we simply delete the prescription 
-    // if the patient never showed up. This keeps the database clean.
-    
     // First, delete the items to prevent foreign key constraint errors
     await db.execute("DELETE FROM prescription_items WHERE prescription_id = ?", [id]);
     
@@ -297,46 +347,38 @@ exports.cancelPrescription = async (req, res) => {
   }
 };
 
+/* 🔥 FIXED: Now fetches ALL data so the frontend can do the Smart Math! */
 exports.getPrescriptionItems = async (req, res) => {
   try {
     const id = req.params.id;
 
+    // Fetch every single detail needed for dispensing math
     const [items] = await db.execute(`
       SELECT 
         pi.medicine_id,
         m.name AS medicine_name,
         m.price AS unit_price,
         m.stock,
+        m.form,
+        m.pack_size,
+        m.dispense_type,
+        pi.dose,
+        pi.unit,
+        pi.frequency,
+        pi.duration,
         pi.morning,
         pi.afternoon,
         pi.evening,
         pi.night,
-        pi.duration
+        pi.instructions
       FROM prescription_items pi
       JOIN medicines m ON pi.medicine_id = m.medicine_id
       WHERE pi.prescription_id = ?
     `, [id]);
-    const formatted = items.map(item => {
-      const tabletsPerDay =
-        (item.morning || 0) +
-        (item.afternoon || 0) +
-        (item.evening || 0) +
-        (item.night || 0);
-
-      const numberOfDays = Number(item.duration) || 1;
-
-      const totalQuantity = tabletsPerDay * numberOfDays;
-
-      return {
-        medicine_id: item.medicine_id,
-        medicine_name: item.medicine_name,
-        unit_price: item.unit_price,
-        stock: item.stock,
-        quantity_required: totalQuantity
-      };
-    });
-
-    res.json(formatted);
+    
+    // We NO LONGER calculate 'quantity_required' in the backend. 
+    // We pass the raw data straight to the frontend's Smart Calculator.
+    res.json(items);
 
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -390,5 +432,30 @@ exports.markBillPaid = async (req, res) => {
   } catch (err) {
     console.error("MARK BILL PAID ERROR:", err);
     res.status(500).json({ message: err.message });
+  }
+};
+
+/* ==========================================
+   GET BILL DETAILS (ITEMS INSIDE A BILL)
+========================================== */
+exports.getBillDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [items] = await db.execute(`
+      SELECT 
+        bi.quantity, 
+        bi.price, 
+        m.name AS medicine_name,
+        (bi.quantity * bi.price) AS total_price
+      FROM bill_items bi
+      JOIN medicines m ON bi.medicine_id = m.medicine_id
+      WHERE bi.bill_id = ?
+    `, [id]);
+
+    res.json(items);
+  } catch (err) {
+    console.error("GET BILL DETAILS ERROR:", err);
+    res.status(500).json({ message: "Failed to load bill items" });
   }
 };

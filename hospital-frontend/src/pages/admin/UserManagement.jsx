@@ -43,17 +43,12 @@ export default function UserManagement() {
     const fetchDepartments = async () => {
       try {
         const res = await api.get('/admin/departments');
-
-        const activeDepartments = res.data.filter(
-          d => d.status === 'active'
-        );
-
+        const activeDepartments = res.data.filter(d => d.status === 'active');
         setDepartments(activeDepartments);
       } catch (err) {
         toast.error("Failed to load departments");
       }
     };
-
     fetchDepartments();
   }, []);
 
@@ -86,6 +81,19 @@ export default function UserManagement() {
     }
   };
 
+  // 🔥 NEW: Delete User Logic
+  const handleDelete = async (id) => {
+    if (!window.confirm("Are you sure you want to permanently delete this user? This cannot be undone.")) return;
+
+    try {
+      const res = await api.delete(`/admin/users/${id}`);
+      toast.success(res.data.message || "User deleted successfully");
+      fetchUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.message || "Failed to delete user");
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -98,13 +106,13 @@ export default function UserManagement() {
 
     try {
       if (editingUserId) {
+        // UPDATE Existing User
         await api.put(`/admin/users/${editingUserId}`, {
-          full_name: form.name,
+          full_name: form.name, 
           email: form.email,
           phone: form.phone,
           department: form.department
         });
-
         toast.success("User updated successfully");
       } else {
         if (!form.password) {
@@ -113,15 +121,15 @@ export default function UserManagement() {
           return;
         }
 
+        // Create New User
         await api.post('/auth/register', {
-          full_name: form.name,
+          name: form.name, 
           email: form.email,
           phone: form.phone,
           role: form.role,
           department: form.department,
           password: form.password
         });
-
         toast.success(`${form.role} account created!`);
       }
 
@@ -173,15 +181,15 @@ export default function UserManagement() {
         </div>
       ) : (
         <div className="card p-0">
-          <div className="flex gap-2 mb-6 flex-wrap">
+          <div className="flex gap-2 mb-6 flex-wrap p-4 pb-0">
             {['all', ...ROLES].map(role => (
               <button
                 key={role}
                 onClick={() => setActiveRole(role)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition 
-        ${activeRole === role
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 hover:bg-gray-200'
+                  ${activeRole === role
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
                   }`}
               >
                 {role === 'all'
@@ -193,6 +201,7 @@ export default function UserManagement() {
               </button>
             ))}
           </div>
+          
           <div className="table-container">
             <table className="table">
               <thead>
@@ -209,30 +218,40 @@ export default function UserManagement() {
               <tbody>
                 {filteredUsers.map(u => (
                   <tr key={u.user_id}>
-                    <td className="font-medium">{u.full_name}</td>
+                    <td className="font-medium text-gray-900">{u.full_name}</td>
                     <td className="text-gray-500">{u.email}</td>
-                    <td className="capitalize font-medium">{u.role}</td>
+                    <td className="capitalize font-medium text-gray-700">{u.role}</td>
                     <td>{u.department || '—'}</td>
-                    <td>{formatDate(u.created_at)}</td>
+                    <td className="text-gray-500">{formatDate(u.created_at)}</td>
                     <td><StatusBadge status={u.status || 'active'} /></td>
                     <td>
-                      {u.role !== 'patient' ? (
-                        <div className="flex gap-2">
+                      {u.role !== 'admin' ? (
+                        <div className="flex gap-3 items-center">
                           <button
                             onClick={() => handleEdit(u)}
-                            className="text-xs text-blue-600 hover:underline"
+                            className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
                           >
                             Edit
                           </button>
+                          <span className="text-gray-300">|</span>
                           <button
                             onClick={() => handleToggleStatus(u.user_id)}
-                            className="text-xs text-red-600 hover:underline"
+                            className="text-xs font-semibold text-amber-600 hover:text-amber-800 transition-colors"
                           >
                             {u.status === "active" ? "Deactivate" : "Activate"}
                           </button>
+                          <span className="text-gray-300">|</span>
+                          
+                          {/* 🔥 NEW: Delete Button */}
+                          <button
+                            onClick={() => handleDelete(u.user_id)}
+                            className="text-xs font-semibold text-red-600 hover:text-red-800 transition-colors"
+                          >
+                            Delete
+                          </button>
                         </div>
                       ) : (
-                        <span className="text-gray-400 text-xs">View Only</span>
+                        <span className="text-gray-400 text-xs font-medium bg-gray-100 px-2 py-1 rounded">Super Admin</span>
                       )}
                     </td>
                   </tr>
@@ -243,6 +262,7 @@ export default function UserManagement() {
         </div>
       )}
 
+      {/* CREATE/EDIT MODAL */}
       <Modal
         open={showCreate}
         onClose={() => {
