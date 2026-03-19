@@ -208,7 +208,10 @@ exports.getCompletedAppointments = async (req, res) => {
    5️⃣ GENERATE BILL
 ================================= */
 exports.generateBill = async (req, res) => {
+  const conn = await db.getConnection(); // 🔥 Using a strict transaction
   try {
+    await conn.beginTransaction();
+
     const {
       appointment_id,
       patient_id,
@@ -217,10 +220,12 @@ exports.generateBill = async (req, res) => {
       total_amount
     } = req.body;
 
+    if (!appointment_id) throw new Error("Appointment ID is missing");
+
     const generated_by = req.user?.id || req.user?.user_id || null;
 
     // Create the Main Bill
-    const [billResult] = await db.execute(`
+    const [billResult] = await conn.execute(`
       INSERT INTO bills 
       (appointment_id, patient_id, bill_type, total_amount, payment_status, generated_by, created_at)
       VALUES (?, ?, 'consultation', ?, 'paid', ?, NOW())
@@ -228,33 +233,40 @@ exports.generateBill = async (req, res) => {
 
     const bill_id = billResult.insertId;
 
-    // 🔥 REMOVED THE SILENT TRY/CATCH. If this fails, it will now throw a real error!
     if (Number(consultation_fee) > 0) {
-      await db.execute(
+      await conn.execute(
         "INSERT INTO bill_items (bill_id, quantity, price, description) VALUES (?, 1, ?, 'Consultation Fee')", 
         [bill_id, consultation_fee]
       );
     }
     if (Number(lab_charges) > 0) {
-      await db.execute(
+      await conn.execute(
         "INSERT INTO bill_items (bill_id, quantity, price, description) VALUES (?, 1, ?, 'Laboratory Charges')", 
         [bill_id, lab_charges]
       );
     }
 
     // Update the appointment status
-    await db.execute(`
+    const [updateResult] = await conn.execute(`
       UPDATE appointments 
       SET billing_status = 'generated' 
       WHERE appointment_id = ?
     `, [appointment_id]);
 
+    // 🔥 Safety Check: Ensure the update actually changed a row!
+    if (updateResult.affectedRows === 0) {
+       throw new Error("Failed to update appointment. ID mismatch.");
+    }
+
+    await conn.commit();
     res.status(201).json({ message: "Bill generated successfully!" });
 
   } catch (error) {
+    await conn.rollback();
     console.error("🚨 GENERATE BILL CRASH:", error);
-    // 🔥 Now React will show exactly WHY the items are failing in the red toast popup!
-    res.status(500).json({ message: "Item Error: " + error.message });
+    res.status(500).json({ message: error.message || "Failed to generate bill" });
+  } finally {
+    conn.release();
   }
 };
 /* ==============================

@@ -176,14 +176,26 @@ exports.getMyPrescriptions = async (req, res) => {
 ================================= */
 exports.getMyLabReports = async (req, res) => {
   try {
-    const [reports] = await db.execute(`
+    const { appointment_id } = req.query; // 🔥 We now accept the appointment ID from the frontend!
+    
+    let query = `
       SELECT lr.request_id, lr.test_name, lr.department, lr.status, lr.result, lr.updated_at,
              u.full_name as doctor_name
       FROM lab_requests lr
       JOIN users u ON lr.doctor_id = u.user_id
       WHERE lr.patient_id = ? AND lr.status = 'completed'
-      ORDER BY lr.updated_at DESC
-    `, [req.user.id]);
+    `;
+    const params = [req.user.id];
+
+    // 🔥 If frontend asks for a specific bill's labs, filter it!
+    if (appointment_id) {
+      query += ` AND lr.appointment_id = ?`;
+      params.push(appointment_id);
+    }
+
+    query += ` ORDER BY lr.updated_at DESC`;
+
+    const [reports] = await db.execute(query, params);
     
     res.json(reports);
   } catch (err) {

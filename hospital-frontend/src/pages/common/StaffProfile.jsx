@@ -117,6 +117,22 @@ export default function StaffProfile() {
                 </p>
               </div>
 
+              {/* Date of Birth */}
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Date of Birth</p>
+                <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100">
+                  {data.dob ? formatDate(data.dob) : '—'}
+                </p>
+              </div>
+
+              {/* Gender */}
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Gender</p>
+                <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100 capitalize">
+                  {data.gender || '—'}
+                </p>
+              </div>
+
               {/* Department (If applicable) */}
               {data.department && (
                 <div>
@@ -132,6 +148,14 @@ export default function StaffProfile() {
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Joined Date</p>
                 <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100">
                   {data.created_at ? formatDate(data.created_at) : '—'}
+                </p>
+              </div>
+
+              {/* Address (Spans Full Width) */}
+              <div className="sm:col-span-2">
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Address</p>
+                <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100 min-h-[40px]">
+                  {data.address || '—'}
                 </p>
               </div>
             </div>

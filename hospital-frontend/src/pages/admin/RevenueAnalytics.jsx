@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Spinner, StatCard, PageHeader } from '../../components/common';
-import { formatCurrency } from '../../utils/helpers';
+import { formatCurrency, formatDate } from '../../utils/helpers';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell
 } from 'recharts';
-import { TrendingUp, DollarSign, Activity, CreditCard, Users, IndianRupee } from 'lucide-react';
+import { TrendingUp, DollarSign, Activity, CreditCard, Download } from 'lucide-react';
+
+// 🔥 IMPORTS FOR PDF GENERATION
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899', '#06b6d4'];
 
@@ -49,8 +53,6 @@ export default function RevenueAnalytics() {
     fetchData();
   }, []);
 
-  if (loading) return <Spinner />;
-
   const revBreakdown = [
     { name: 'Consultation', value: stats?.consultation_revenue || 0 },
     { name: 'Lab Tests', value: stats?.lab_revenue || 0 },
@@ -68,9 +70,170 @@ export default function RevenueAnalytics() {
     { month: 'Feb', consultation_revenue: 28000, lab_revenue: 14000, pharmacy_revenue: 10500 },
   ];
 
+  // 🔥 PDF SPECIFIC CURRENCY FORMATTER (Bypasses the ₹ symbol bug in jsPDF)
+  const formatPDFCurrency = (value) => {
+    const num = Number(value) || 0;
+    return "Rs. " + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // 🔥 PDF GENERATOR FUNCTION
+  const generatePDFReport = () => {
+    try {
+      const doc = new jsPDF();
+      const dateStr = new Date().toLocaleDateString();
+
+      // Report Header
+      doc.setFontSize(22);
+      doc.setTextColor(41, 128, 185);
+      doc.text("MediCare HMS", 105, 20, { align: "center" });
+
+      doc.setFontSize(14);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Financial & Revenue Analytics Report", 105, 28, { align: "center" });
+
+      doc.setFontSize(10);
+      doc.setTextColor(150, 150, 150);
+      doc.text(`Generated on: ${dateStr}`, 105, 34, { align: "center" });
+
+      // 1. Overall Financial Summary Table
+      doc.setFontSize(12);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "bold");
+      doc.text("1. Overall Financial Summary", 14, 45);
+
+      const summaryData = [
+        ["Total Revenue", formatPDFCurrency(totalRevenue)],
+        ["Consultation Revenue", formatPDFCurrency(stats?.consultation_revenue || 0)],
+        ["Laboratory Revenue", formatPDFCurrency(stats?.lab_revenue || 0)],
+        ["Pharmacy Revenue", formatPDFCurrency(stats?.pharmacy_revenue || 0)],
+        ["Today's Revenue", formatPDFCurrency(stats?.today_revenue || 0)],
+        ["This Month's Revenue", formatPDFCurrency(stats?.monthly_revenue || 0)],
+        ["Total Paid Bills", String(stats?.paid_bills_count || 0)],
+        ["Pending Bills", String(stats?.pending_bills || 0)]
+      ];
+
+      autoTable(doc, {
+        startY: 50,
+        body: summaryData,
+        theme: 'grid',
+        styles: { fontSize: 10, cellPadding: 5 },
+        columnStyles: { 
+          0: { fontStyle: 'bold', cellWidth: 100, fillColor: [248, 250, 252] }, 
+          1: { halign: 'right' } // Perfectly right-aligns the numbers
+        }
+      });
+
+      // 2. Monthly Revenue Trend Table
+      let currentY = doc.lastAutoTable.finalY + 15;
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("2. Monthly Revenue Breakdown", 14, currentY);
+
+      // 🔥 FIXED: Explicitly aligning headers to match the data columns
+      const monthlyHead = [[
+        { content: "Month", styles: { halign: 'left' } },
+        { content: "Consultation", styles: { halign: 'right' } },
+        { content: "Lab", styles: { halign: 'right' } },
+        { content: "Pharmacy", styles: { halign: 'right' } },
+        { content: "Total", styles: { halign: 'right' } }
+      ]];
+
+      const monthlyBody = chartData.map(m => [
+        m.month,
+        formatPDFCurrency(m.consultation_revenue || 0),
+        formatPDFCurrency(m.lab_revenue || 0),
+        formatPDFCurrency(m.pharmacy_revenue || 0),
+        formatPDFCurrency((m.consultation_revenue || 0) + (m.lab_revenue || 0) + (m.pharmacy_revenue || 0))
+      ]);
+
+      autoTable(doc, {
+        startY: currentY + 5,
+        head: monthlyHead,
+        body: monthlyBody,
+        theme: 'striped',
+        headStyles: { fillColor: [41, 128, 185] },
+        styles: { fontSize: 9 },
+        // Perfectly aligning all the numbers in the body
+        columnStyles: { 
+          1: { halign: 'right' }, 
+          2: { halign: 'right' }, 
+          3: { halign: 'right' }, 
+          4: { halign: 'right', fontStyle: 'bold' } 
+        }
+      });
+
+      // 3. Doctor Performance Table
+      if (doctorPerformance && doctorPerformance.length > 0) {
+        currentY = doc.lastAutoTable.finalY + 15;
+
+        if (currentY > 250) {
+          doc.addPage();
+          currentY = 20;
+        }
+
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text("3. Doctor Performance Summary", 14, currentY);
+
+        // 🔥 FIXED: Centered headers for the number columns
+        const docHead = [[
+          { content: "Doctor Name", styles: { halign: 'left' } },
+          { content: "Department", styles: { halign: 'left' } },
+          { content: "Consultations", styles: { halign: 'center' } },
+          { content: "Avg/Day", styles: { halign: 'center' } }
+        ]];
+
+        const docBody = doctorPerformance.map(doc => [
+          doc.doctor_name || doc.name || 'Unknown',
+          doc.department || 'General',
+          String(doc.consultations || 0),
+          String(doc.avg_per_day || (doc.consultations ? (doc.consultations / 30).toFixed(1) : '0.0'))
+        ]);
+
+        autoTable(doc, {
+          startY: currentY + 5,
+          head: docHead,
+          body: docBody,
+          theme: 'striped',
+          headStyles: { fillColor: [16, 185, 129] }, 
+          styles: { fontSize: 9 },
+          columnStyles: { 2: { halign: 'center' }, 3: { halign: 'center' } }
+        });
+      }
+
+      // Footer Note
+      const finalY = doc.lastAutoTable.finalY + 15;
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "italic");
+      doc.setTextColor(150, 150, 150);
+      doc.text("CONFIDENTIAL - MediCare HMS Internal Financial Report", 105, finalY > 280 ? 280 : finalY, { align: "center" });
+
+      // Save the PDF
+      doc.save(`Revenue_Report_${dateStr.replace(/\//g, '-')}.pdf`);
+      toast.success("Financial Report Downloaded Successfully!");
+    } catch (err) {
+      console.error("PDF ERROR:", err);
+      toast.error("Failed to generate PDF report");
+    }
+  };
+
+  if (loading) return <Spinner />;
+
   return (
     <div>
-      <PageHeader title="Revenue Analytics" subtitle="Complete financial overview of the hospital" />
+      <PageHeader 
+        title="Revenue Analytics" 
+        subtitle="Complete financial overview of the hospital" 
+        action={
+          <button 
+            onClick={generatePDFReport}
+            className="btn-primary flex items-center gap-2"
+          >
+            <Download size={16} />
+            Download Report
+          </button>
+        }
+      />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard icon={DollarSign} label="Total Revenue" value={formatCurrency(totalRevenue)} color="green" />
@@ -93,7 +256,6 @@ export default function RevenueAnalytics() {
                 outerRadius={60} 
                 paddingAngle={4} 
                 dataKey="value" 
-                /* 🔥 FIX: Removed 'fill' so colors work properly! */
                 style={{ fontSize: '11px', fontWeight: '600' }} 
                 label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} 
                 labelLine={false}
@@ -188,7 +350,6 @@ export default function RevenueAnalytics() {
                 cy="50%"
                 outerRadius={65} 
                 labelLine={true}
-                /* 🔥 FIX: Removed 'fill' so colors work properly! */
                 style={{ fontSize: '11px', fontWeight: '600' }}
                 label={({ department, name, percent }) => `${department || name} ${(percent * 100).toFixed(0)}%`}
               >

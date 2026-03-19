@@ -12,7 +12,8 @@ const weakPasswordMsg = "Password is weak! It must be at least 8 characters long
 ========================= */
 exports.register = async (req, res) => {
   try {
-    const { name, email, phone, password, role } = req.body;
+    // 🔥 FIXED: Added dob, gender, and address to be extracted from req.body
+    const { name, email, phone, password, role, dob, gender, address } = req.body;
 
     // 🛡️ 1. Required Fields Check
     if (!name || !email || !password || !phone) {
@@ -58,11 +59,12 @@ exports.register = async (req, res) => {
     // Default role = patient
     const userRole = role || "patient";
 
+    // 🔥 FIXED: Added dob, gender, and address to the INSERT query
     await db.execute(
       `INSERT INTO users 
-      (full_name, email, phone, password_hash, role, status, created_by)
-      VALUES (?, ?, ?, ?, ?, 'active', 'self')`,
-      [name, email, phone, hashedPassword, userRole]
+      (full_name, email, phone, password_hash, role, status, created_by, dob, gender, address)
+      VALUES (?, ?, ?, ?, ?, 'active', 'self', ?, ?, ?)`,
+      [name, email, phone, hashedPassword, userRole, dob || null, gender || null, address || null]
     );
 
     res.status(201).json({

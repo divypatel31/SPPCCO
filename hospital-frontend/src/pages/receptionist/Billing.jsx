@@ -21,7 +21,8 @@ export default function BillingPage() {
     try {
       const [feeRes, apptRes] = await Promise.allSettled([
         api.get('/receptionist/consultation-fee'), 
-        api.get('/receptionist/completed-appointments')
+        // 🔥 CACHE BUSTER: Forces the browser to get fresh data from the DB
+        api.get(`/receptionist/completed-appointments?t=${Date.now()}`)
       ]);
 
       if (feeRes.status === 'fulfilled') {
@@ -40,7 +41,6 @@ export default function BillingPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Calculate total strictly from Consult + Lab
   const total = Number(billForm.consultation_fee) + Number(billForm.lab_charges);
 
   const openGenerateModal = (appt) => {
@@ -65,7 +65,18 @@ export default function BillingPage() {
         lab_charges: billForm.lab_charges,
         total_amount: total,
       });
+      
       toast.success('Master Bill generated successfully!');
+      
+      // 🔥 OPTIMISTIC UI UPDATE: Instantly changes the status on the screen
+      setAppointments(prev => prev.map(a => {
+        const currentId = a.appointment_id || a._id || a.id;
+        if (currentId === appointmentId) {
+          return { ...a, billing_status: 'generated' };
+        }
+        return a;
+      }));
+
       setSelected(null);
       fetchData(); 
     } catch (err) {
@@ -122,7 +133,6 @@ export default function BillingPage() {
                       </td>
                       <td className="flex items-center gap-2">
                         
-                        {/* GENERATE BILL BUTTON */}
                         {(!appt.billing_status || appt.billing_status === 'not_generated') && (
                           <button
                             onClick={() => openGenerateModal(appt)}
@@ -132,7 +142,6 @@ export default function BillingPage() {
                           </button>
                         )}
                         
-                        {/* COMPLETED STATE (No Eye Button) */}
                         {(appt.billing_status === 'generated' || appt.billing_status === 'paid') && (
                            <span className="text-gray-400 text-xs italic font-medium flex items-center gap-1">
                              <CheckCircle size={12} className="text-green-500" /> Completed

@@ -22,11 +22,30 @@ export default function MyBills() {
       .finally(() => setLoading(false));
   }, []);
 
-  // 🔥 GENERATE PAYMENT RECEIPT (Now handles Combined Master Bills)
-  const generatePDF = (bill) => {
+  const formatPDFCurrency = (value) => {
+    const num = Number(value) || 0;
+    return "Rs. " + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // 🔥 MADE ASYNC to fetch lab details before drawing the PDF!
+  const generatePDF = async (bill) => {
+    const toastId = toast.loading("Generating your receipt...");
     try {
       const doc = new jsPDF();
       const billIdStr = (bill.bill_id || bill._id || '').toString().slice(-8).toUpperCase();
+
+      // Fetch Lab Test Names if this is a Master/Consultation Bill
+      let labTestNames = "";
+      if (['consultation', 'master'].includes(bill.bill_type) && bill.appointment_id) {
+        try {
+          const labRes = await api.get(`/patient/lab-reports?appointment_id=${bill.appointment_id}`);
+          if (labRes.data && labRes.data.length > 0) {
+            labTestNames = labRes.data.map(r => r.test_name).join(', ');
+          }
+        } catch (e) {
+          console.error("Could not fetch lab details");
+        }
+      }
 
       // Header
       doc.setFontSize(22);
@@ -45,38 +64,57 @@ export default function MyBills() {
       doc.text(`Patient Name: ${user?.name || 'Patient'}`, 130, 45);
       doc.text(`Status: ${bill.payment_status.toUpperCase()}`, 130, 52);
 
-      // 🔥 COMBINED BILL LOGIC
-      let tableColumn = ["Description", "Amount"];
+      let tableColumn = [];
       let tableRows = [];
+      let alignStyles = {}; 
 
-      // Check if it's a master bill with multiple charges from the receptionist
-      if (bill.consultation_fee !== undefined || bill.lab_charges !== undefined || ['consultation', 'master'].includes(bill.bill_type)) {
-
-        // Push individual line items if they exist and are greater than 0
-        if (Number(bill.consultation_fee) > 0) tableRows.push(["Consultation Fee", formatCurrency(bill.consultation_fee)]);
-        if (Number(bill.lab_charges) > 0) tableRows.push(["Laboratory Charges", formatCurrency(bill.lab_charges)]);
-        if (Number(bill.medicine_charges) > 0) tableRows.push(["Pharmacy / Medicine Charges", formatCurrency(bill.medicine_charges)]);
-        if (Number(bill.other_charges) > 0) tableRows.push(["Other / Misc Charges", formatCurrency(bill.other_charges)]);
-
-        // Fallback if the backend just sent the total
-        if (tableRows.length === 0) {
-          tableRows = [["Consultation & Hospital Services", formatCurrency(bill.total_amount)]];
-        }
-
-      } else if (bill.bill_type === 'pharmacy' && bill.items && bill.items.length > 0) {
-        // Direct Pharmacy Bill format
-        tableColumn = ["Medicine Name", "Qty", "Price", "Total"];
+      // 1. PHARMACY BILL FORMAT
+      if (bill.bill_type === 'pharmacy' && bill.items && bill.items.length > 0) {
+        tableColumn = [
+          { content: "Medicine Name", styles: { halign: 'left' } },
+          { content: "Qty", styles: { halign: 'center' } },
+          { content: "Price", styles: { halign: 'right' } },
+          { content: "Total", styles: { halign: 'right' } }
+        ];
         tableRows = bill.items.map(item => [
           item.item_name || item.name || 'Medicine',
           (item.quantity || 1).toString(),
-          formatCurrency(item.price || 0),
-          formatCurrency((item.quantity || 1) * (item.price || 0))
+          formatPDFCurrency(item.price || 0),
+          formatPDFCurrency((item.quantity || 1) * (item.price || 0))
         ]);
-      } else {
-        // Generic single-item bill fallback
-        tableRows = [
-          [`${(bill.bill_type || 'General').toUpperCase()} Charges`, formatCurrency(bill.total_amount)]
+        alignStyles = { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right', fontStyle: 'bold' } };
+      } 
+      // 2. MASTER BILL / CONSULTATION FORMAT
+      else if (bill.items && bill.items.length > 0) {
+        tableColumn = [
+          { content: "Description", styles: { halign: 'left' } },
+          { content: "Amount", styles: { halign: 'right' } }
         ];
+        tableRows = bill.items.map(item => {
+          let desc = item.item_name || item.description || 'Service Charge';
+          
+          // 🔥 INJECT LAB NAMES if it's the Lab Charges row
+          if (desc.includes('Laboratory') && labTestNames) {
+            desc += `\n(Tests: ${labTestNames})`;
+          }
+
+          return [
+            desc,
+            formatPDFCurrency(item.price || item.amount || 0)
+          ];
+        });
+        alignStyles = { 1: { halign: 'right' } };
+      } 
+      // 3. FALLBACK
+      else {
+        tableColumn = [
+          { content: "Description", styles: { halign: 'left' } },
+          { content: "Amount", styles: { halign: 'right' } }
+        ];
+        tableRows = [
+          [`${(bill.bill_type || 'General').toUpperCase()} Charges`, formatPDFCurrency(bill.total_amount)]
+        ];
+        alignStyles = { 1: { halign: 'right' } };
       }
 
       // Draw Table
@@ -86,14 +124,19 @@ export default function MyBills() {
         body: tableRows,
         theme: 'striped',
         headStyles: { fillColor: [41, 128, 185] },
-        styles: { fontSize: 10, cellPadding: 5 }
+        styles: { fontSize: 10, cellPadding: 5 },
+        columnStyles: alignStyles
       });
 
       // Footer & Total
       const finalY = doc.lastAutoTable?.finalY || 100;
+      
+      doc.setDrawColor(200, 200, 200);
+      doc.line(14, finalY + 8, 196, finalY + 8);
+      
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
-      doc.text(`Total Paid: ${formatCurrency(bill.total_amount)}`, 14, finalY + 15);
+      doc.text(`Grand Total Paid: ${formatPDFCurrency(bill.total_amount)}`, 196, finalY + 16, { align: "right" });
 
       doc.setFontSize(10);
       doc.setFont("helvetica", "italic");
@@ -101,14 +144,13 @@ export default function MyBills() {
       doc.text("Thank you for choosing MediCare HMS. Wishing you good health!", 105, finalY + 40, { align: "center" });
 
       doc.save(`MediCare_Receipt_${billIdStr}.pdf`);
-      toast.success("Receipt downloaded!");
+      toast.success("Receipt downloaded!", { id: toastId });
     } catch (error) {
       console.error(error);
-      toast.error("Error generating Receipt PDF");
+      toast.error("Error generating Receipt PDF", { id: toastId });
     }
   };
 
-  // GENERATE MEDICAL LAB REPORT
   const generateLabResultPDF = async (bill) => {
     try {
       const res = await api.get(`/patient/lab-reports?appointment_id=${bill.appointment_id}`);
@@ -157,7 +199,6 @@ export default function MyBills() {
   if (loading) return <Spinner />;
 
   const total = bills.reduce((sum, b) => sum + (parseFloat(b.total_amount) || 0), 0);
-  // 🔥 FIX: safely checks for 'paid' regardless of uppercase/lowercase
   const paid = bills.filter(b => (b.payment_status || '').toLowerCase() === 'paid').reduce((sum, b) => sum + (parseFloat(b.total_amount) || 0), 0);
 
   return (
@@ -207,7 +248,6 @@ export default function MyBills() {
                     <td className="flex items-center gap-2">
                       <StatusBadge status={bill.payment_status} />
 
-                      {/* 🔥 FIX: Safely forces lowercase so the button ALWAYS shows if it's paid */}
                       {(bill.payment_status || '').toLowerCase() === 'paid' && (
                         <>
                           <button

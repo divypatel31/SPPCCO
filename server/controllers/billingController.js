@@ -279,6 +279,9 @@ exports.markBillAsPaid = async (req, res) => {
   }
 };
 
+/* ==============================
+   🔥 FIXED: GET PATIENT BILLS 
+================================= */
 exports.getPatientBills = async (req, res) => {
   try {
     const patientId = req.user.user_id || req.user.id;
@@ -295,29 +298,26 @@ exports.getPatientBills = async (req, res) => {
       [patientId]
     );
 
-    // 2. Fetch items for each bill
+    // 2. Fetch items for each bill dynamically
     for (let bill of bills) {
-      if (bill.bill_type === 'pharmacy') {
-        // JOIN with medicines table to get the name
-        const [items] = await db.execute(
-          `SELECT m.name AS item_name, bi.quantity, bi.price 
-           FROM bill_items bi
-           JOIN medicines m ON bi.medicine_id = m.medicine_id
-           WHERE bi.bill_id = ?`,
-          [bill.bill_id]
-        );
-        bill.items = items;
-      } else {
-        // For Lab or Consultation, bill_items might not have a medicine_id
-        // We fetch whatever is in bill_items or return empty
-        const [items] = await db.execute(
-          `SELECT description AS item_name, amount AS price, 1 AS quantity 
-           FROM bill_items WHERE bill_id = ?`,
-          [bill.bill_id]
-        ).catch(() => [[]]); // Catch error if columns don't exist for these types
-        
-        bill.items = items.length > 0 ? items : [];
-      }
+      // Using a LEFT JOIN safely fetches Medicine names (for pharmacy) 
+      // AND Descriptions (for consultation/labs) without crashing
+      const [items] = await db.execute(
+        `SELECT bi.*, m.name as medicine_name 
+         FROM bill_items bi
+         LEFT JOIN medicines m ON bi.medicine_id = m.medicine_id
+         WHERE bi.bill_id = ?`,
+        [bill.bill_id]
+      );
+
+      // 3. Format the items so the React PDF generator can read them perfectly
+      bill.items = items.map(item => ({
+        description: item.description || item.medicine_name || 'Medical Service',
+        item_name: item.medicine_name || item.description || 'Medical Service',
+        price: Number(item.price) || Number(item.amount) || 0,
+        amount: Number(item.price) || Number(item.amount) || 0,
+        quantity: item.quantity || 1,
+      }));
     }
 
     res.json(bills);
@@ -327,7 +327,6 @@ exports.getPatientBills = async (req, res) => {
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
-
 
 exports.getRevenueSummary = async (req, res) => {
   try {
