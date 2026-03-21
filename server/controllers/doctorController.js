@@ -59,13 +59,12 @@ exports.startConsultation = async (req, res) => {
   }
 };
 
-/* 3️⃣ ADD MEDICAL RECORD (🔥 FIXED FOR AUTO-SAVE) */
+/* 3️⃣ ADD MEDICAL RECORD */
 exports.addMedicalRecord = async (req, res) => {
   try {
     const doctor_id = req.user.id;
     const { appointment_id, symptoms, diagnosis, clinical_notes, follow_up_date } = req.body;
 
-    // Get patient from appointment
     const [appointment] = await db.execute(
       "SELECT patient_id FROM appointments WHERE appointment_id=?",
       [appointment_id]
@@ -76,14 +75,12 @@ exports.addMedicalRecord = async (req, res) => {
 
     const patient_id = appointment[0].patient_id;
 
-    // 🔥 Check if the medical record already exists!
     const [existingRecord] = await db.execute(
       "SELECT * FROM medical_records WHERE appointment_id = ?",
       [appointment_id]
     );
 
     if (existingRecord.length > 0) {
-      // If it exists, UPDATE IT (This allows Auto-Save to overwrite safely)
       await db.execute(
         `UPDATE medical_records 
          SET symptoms = ?, diagnosis = ?, clinical_notes = ?, follow_up_date = ?
@@ -91,7 +88,6 @@ exports.addMedicalRecord = async (req, res) => {
         [symptoms, diagnosis, clinical_notes, follow_up_date, appointment_id]
       );
     } else {
-      // If it doesn't exist, INSERT IT
       await db.execute(
         `INSERT INTO medical_records
          (appointment_id, patient_id, doctor_id, symptoms, diagnosis, clinical_notes, follow_up_date)
@@ -108,13 +104,12 @@ exports.addMedicalRecord = async (req, res) => {
   }
 };
 
-/* 4️⃣ ADD PRESCRIPTION (🔥 FIXED FOR AUTO-SAVE) */
+/* 4️⃣ ADD PRESCRIPTION */
 exports.addPrescription = async (req, res) => {
   try {
     const doctor_id = req.user.id;
     const { appointment_id, medicines } = req.body;
 
-    // Get patient_id
     const [appointment] = await db.execute(
       "SELECT patient_id FROM appointments WHERE appointment_id=?",
       [appointment_id]
@@ -125,7 +120,6 @@ exports.addPrescription = async (req, res) => {
 
     const patient_id = appointment[0].patient_id;
 
-    // 🔥 UPSERT LOGIC: Check if a prescription already exists
     const [existingPrescription] = await db.execute(
       "SELECT prescription_id FROM prescriptions WHERE appointment_id=?",
       [appointment_id]
@@ -135,10 +129,8 @@ exports.addPrescription = async (req, res) => {
 
     if (existingPrescription.length > 0) {
       prescription_id = existingPrescription[0].prescription_id;
-      // Clear out the old draft items so we can insert the newly typed ones
       await db.execute("DELETE FROM prescription_items WHERE prescription_id=?", [prescription_id]);
     } else {
-      // Create new prescription
       const [result] = await db.execute(
         `INSERT INTO prescriptions (appointment_id, doctor_id, patient_id) VALUES (?,?,?)`,
         [appointment_id, doctor_id, patient_id]
@@ -146,10 +138,9 @@ exports.addPrescription = async (req, res) => {
       prescription_id = result.insertId;
     }
 
-    // Insert the fresh list of medicines
     if (medicines && medicines.length > 0) {
       for (let med of medicines) {
-        if (!med.medicine_id) continue; // Skip empty rows
+        if (!med.medicine_id) continue; 
 
         await db.execute(
           `INSERT INTO prescription_items 
@@ -210,14 +201,17 @@ exports.addLabRequest = async (req, res) => {
   }
 };
 
-/* 6️⃣ COMPLETE CONSULTATION (🔥 SIMPLIFIED FOR AUTO-SAVE) */
+/* 6️⃣ COMPLETE CONSULTATION (FIXED: FORCE-SAVES NOTES & MEDICINES) */
 exports.completeConsultation = async (req, res) => {
   try {
-    const doctor_id = req.user.id;
+    const doctor_id = req.user.id || req.user.user_id;
     const appointment_id = req.params.id;
+    
+    // 🔥 We now grab the notes and medicines sent from the Complete button!
+    const { symptoms, diagnosis, notes, follow_up, medicines } = req.body;
 
     const [rows] = await db.execute(
-      `SELECT status FROM appointments WHERE appointment_id=? AND doctor_id=?`,
+      `SELECT status, patient_id FROM appointments WHERE appointment_id=? AND doctor_id=?`,
       [appointment_id, doctor_id]
     );
 
@@ -229,17 +223,66 @@ exports.completeConsultation = async (req, res) => {
       return res.json({ message: "Already completed" });
     }
 
-    if (rows[0].status !== "in_consultation") {
-      return res.status(400).json({ message: "Consultation must be started first" });
+    const patient_id = rows[0].patient_id;
+
+    // 🔥 1. FORCE SAVE MEDICAL RECORDS BEFORE COMPLETING
+    if (symptoms || diagnosis || notes) {
+      const [existingRecord] = await db.execute(
+        "SELECT * FROM medical_records WHERE appointment_id = ?",
+        [appointment_id]
+      );
+
+      if (existingRecord.length > 0) {
+        await db.execute(
+          `UPDATE medical_records 
+           SET symptoms = ?, diagnosis = ?, clinical_notes = ?, follow_up_date = ?
+           WHERE appointment_id = ?`,
+          [symptoms || '', diagnosis || '', notes || '', follow_up || null, appointment_id]
+        );
+      } else {
+        await db.execute(
+          `INSERT INTO medical_records
+           (appointment_id, patient_id, doctor_id, symptoms, diagnosis, clinical_notes, follow_up_date)
+           VALUES (?,?,?,?,?,?,?)`,
+          [appointment_id, patient_id, doctor_id, symptoms || '', diagnosis || '', notes || '', follow_up || null]
+        );
+      }
     }
 
-    // 🔹 Update appointment status (Medicines are already saved via Auto-Save!)
+    // 🔥 2. FORCE SAVE PRESCRIPTIONS BEFORE COMPLETING
+    if (medicines && medicines.length > 0) {
+      const [existingRx] = await db.execute("SELECT prescription_id FROM prescriptions WHERE appointment_id=?", [appointment_id]);
+      let prescription_id;
+
+      if (existingRx.length > 0) {
+        prescription_id = existingRx[0].prescription_id;
+        await db.execute("DELETE FROM prescription_items WHERE prescription_id=?", [prescription_id]);
+      } else {
+        const [result] = await db.execute(
+          `INSERT INTO prescriptions (appointment_id, doctor_id, patient_id) VALUES (?,?,?)`,
+          [appointment_id, doctor_id, patient_id]
+        );
+        prescription_id = result.insertId;
+      }
+
+      for (let med of medicines) {
+        if (!med.medicine_id) continue;
+        await db.execute(
+          `INSERT INTO prescription_items 
+          (prescription_id, medicine_id, dose, unit, frequency, duration, morning, afternoon, evening, night, food_timing, instructions) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [prescription_id, med.medicine_id, med.dose || 1, med.unit || 'tablet', med.frequency || 1, med.duration || 1, med.morning, med.afternoon, med.evening, med.night, med.food_timing, med.instructions || '']
+        );
+      }
+    }
+
+    // 3. FINALLY, MARK APPOINTMENT AS COMPLETED
     await db.execute(
       `UPDATE appointments SET status='completed' WHERE appointment_id=?`,
       [appointment_id]
     );
 
-    res.json({ message: "Consultation completed successfully" });
+    res.json({ message: "Consultation completed and records saved successfully!" });
 
   } catch (err) {
     console.error("COMPLETE ERROR:", err);
@@ -247,13 +290,17 @@ exports.completeConsultation = async (req, res) => {
   }
 };
 
-/* 7️⃣ GET SINGLE APPOINTMENT (🔥 FIXED TO FETCH ALL AUTO-SAVE DATA) */
+/* 7️⃣ GET SINGLE APPOINTMENT (FAIL-SAFE VERSION) */
 exports.getAppointmentById = async (req, res) => {
   try {
-    const doctor_id = req.user.id;
+    const doctor_id = req.user.id || req.user.user_id;
     const appointment_id = req.params.id;
 
-    // 1️⃣ Get appointment
+    if (!doctor_id) {
+      return res.status(401).json({ message: "Unauthorized: Doctor ID missing" });
+    }
+
+    // 1. Get the Main Appointment (If this fails, the appointment doesn't exist)
     const [appointmentRows] = await db.execute(
       `SELECT a.*, u.full_name AS patient_name
        FROM appointments a
@@ -268,58 +315,70 @@ exports.getAppointmentById = async (req, res) => {
 
     const appointment = appointmentRows[0];
 
-    // 2️⃣ Get lab results
-    const [labResults] = await db.execute(
-      `SELECT lr.request_id, lr.test_name, lr.status, lr.result
-       FROM lab_requests lr WHERE lr.appointment_id=?`,
-      [appointment_id]
-    );
+    // Set defaults so the React frontend never crashes!
+    appointment.lab_results = [];
+    appointment.medical_record = null;
+    appointment.medicines = [];
 
-    appointment.lab_results = labResults;
-
-    // 3️⃣ Get the auto-saved medical record
-    const [medicalRecords] = await db.execute(
-      `SELECT symptoms, diagnosis, clinical_notes, follow_up_date 
-       FROM medical_records WHERE appointment_id=?`,
-      [appointment_id]
-    );
-    
-    if (medicalRecords.length > 0) {
-      appointment.medical_record = medicalRecords[0];
+    // 2. SAFELY Fetch Lab Results (Uses SELECT * to avoid missing column crashes)
+    try {
+      const [labResults] = await db.execute(
+        `SELECT * FROM lab_requests WHERE appointment_id=?`,
+        [appointment_id]
+      );
+      appointment.lab_results = labResults;
+    } catch (labErr) {
+      console.error("⚠️ Lab results fetch error:", labErr.message);
     }
 
-    // 🔥 4️⃣ Get the auto-saved medicines!
-    const [prescriptions] = await db.execute(
-      `SELECT prescription_id FROM prescriptions WHERE appointment_id=?`, 
-      [appointment_id]
-    );
-    
-    if (prescriptions.length > 0) {
-      const [items] = await db.execute(
-        `SELECT * FROM prescription_items WHERE prescription_id=?`, 
-        [prescriptions[0].prescription_id]
+    // 3. SAFELY Fetch Medical Records (Uses SELECT *)
+    try {
+      const [medicalRecords] = await db.execute(
+        `SELECT * FROM medical_records WHERE appointment_id=?`,
+        [appointment_id]
+      );
+      if (medicalRecords.length > 0) {
+        appointment.medical_record = medicalRecords[0];
+      }
+    } catch (medErr) {
+      console.error("⚠️ Medical records fetch error:", medErr.message);
+    }
+
+    // 4. SAFELY Fetch Prescriptions
+    try {
+      const [prescriptions] = await db.execute(
+        `SELECT prescription_id FROM prescriptions WHERE appointment_id=?`, 
+        [appointment_id]
       );
       
-      // Convert 1/0 back to true/false for the frontend checkboxes
-      appointment.medicines = items.map(item => ({
-        ...item,
-        morning: item.morning === 1,
-        afternoon: item.afternoon === 1,
-        evening: item.evening === 1,
-        night: item.night === 1
-      }));
-    } else {
-      appointment.medicines = [];
+      if (prescriptions.length > 0) {
+        const [items] = await db.execute(
+          `SELECT * FROM prescription_items WHERE prescription_id=?`, 
+          [prescriptions[0].prescription_id]
+        );
+        
+        appointment.medicines = items.map(item => ({
+          ...item,
+          morning: item.morning === 1,
+          afternoon: item.afternoon === 1,
+          evening: item.evening === 1,
+          night: item.night === 1
+        }));
+      }
+    } catch (rxErr) {
+      console.error("⚠️ Prescription fetch error:", rxErr.message);
     }
 
+    // Send the safe data back to React
     res.json(appointment);
 
   } catch (err) {
+    console.error("GET APPOINTMENT FATAL ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
 
-/* 0️⃣ DOCTOR CANCEL APPOINTMENT */
+/* 8️⃣ CANCEL APPOINTMENT */
 exports.cancelAppointment = async (req, res) => {
   try {
     const doctor_id = req.user.id;
@@ -356,9 +415,7 @@ exports.cancelAppointment = async (req, res) => {
   }
 };
 
-/* ==============================
-   GET MY SCHEDULE (DOCTOR ONLY)
-================================= */
+/* 9️⃣ GET MY SCHEDULE */
 exports.getMySchedule = async (req, res) => {
   try {
     const doctor_id = req.user.id; 
@@ -380,5 +437,61 @@ exports.getMySchedule = async (req, res) => {
   } catch (error) {
     console.error("MY SCHEDULE ERROR:", error);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+/* 10. GET PATIENT PAST HISTORY WITH LABS AND MEDICINES */
+exports.getPatientHistory = async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const currentApptId = req.query.current_appt;
+
+    // 1. Fetch appointments & medical records
+    const [history] = await db.execute(
+      `SELECT a.appointment_id, a.appointment_date, 
+              d.full_name AS doctor_name, d.department,
+              m.symptoms, m.diagnosis, m.clinical_notes
+       FROM appointments a
+       JOIN users d ON a.doctor_id = d.user_id
+       LEFT JOIN medical_records m ON a.appointment_id = m.appointment_id
+       WHERE a.patient_id = ? AND a.status = 'completed' AND a.appointment_id != ?
+       ORDER BY a.appointment_date DESC`,
+      [patientId, currentApptId || 0]
+    );
+
+    // 2. Loop through history and attach lab results AND medicines!
+    for (let record of history) {
+      // Fetch Labs
+      const [labs] = await db.execute(
+         `SELECT * FROM lab_requests WHERE appointment_id = ?`,
+         [record.appointment_id]
+      );
+      record.lab_results = labs;
+
+      // Fetch Prescribed Medicines
+      const [prescriptions] = await db.execute(
+        `SELECT prescription_id FROM prescriptions WHERE appointment_id = ?`,
+        [record.appointment_id]
+      );
+      
+      if (prescriptions.length > 0) {
+        // We use JOIN to get the actual medicine name from the medicines table
+        const [meds] = await db.execute(
+          `SELECT pi.*, m.name as medicine_name 
+           FROM prescription_items pi
+           JOIN medicines m ON pi.medicine_id = m.medicine_id
+           WHERE pi.prescription_id = ?`,
+          [prescriptions[0].prescription_id]
+        );
+        record.medicines = meds;
+      } else {
+        record.medicines = [];
+      }
+    }
+
+    res.json(history);
+  } catch (err) {
+    console.error("HISTORY ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 };

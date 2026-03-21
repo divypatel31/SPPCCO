@@ -170,35 +170,37 @@ exports.getMyPrescriptions = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch prescriptions" });
   }
 };
-
 /* ==============================
-   GET PATIENT LAB REPORTS
+   GET PATIENT LAB REPORTS (FIXED 500 ERROR)
 ================================= */
 exports.getMyLabReports = async (req, res) => {
   try {
-    const { appointment_id } = req.query; // 🔥 We now accept the appointment ID from the frontend!
+    const { appointment_id } = req.query; 
+    const patient_id = req.user.id || req.user.user_id; // 🔥 Fail-safe ID check
     
+    // 🔥 FIXED: Removed lr.updated_at so MySQL doesn't crash!
     let query = `
-      SELECT lr.request_id, lr.test_name, lr.department, lr.status, lr.result, lr.updated_at,
+      SELECT lr.request_id, lr.test_name, lr.department, lr.status, lr.result,
              u.full_name as doctor_name
       FROM lab_requests lr
       JOIN users u ON lr.doctor_id = u.user_id
       WHERE lr.patient_id = ? AND lr.status = 'completed'
     `;
-    const params = [req.user.id];
+    const params = [patient_id];
 
-    // 🔥 If frontend asks for a specific bill's labs, filter it!
     if (appointment_id) {
       query += ` AND lr.appointment_id = ?`;
       params.push(appointment_id);
     }
 
-    query += ` ORDER BY lr.updated_at DESC`;
+    // 🔥 FIXED: Sort by request_id instead of the missing updated_at column
+    query += ` ORDER BY lr.request_id DESC`;
 
     const [reports] = await db.execute(query, params);
     
     res.json(reports);
   } catch (err) {
+    console.error("LAB REPORTS ERROR:", err);
     res.status(500).json({ message: "Failed to load lab reports" });
   }
 };

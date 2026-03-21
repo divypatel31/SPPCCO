@@ -6,7 +6,6 @@ import toast from 'react-hot-toast';
 import { CreditCard, Download, FileText } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-// FIXED IMPORTS FOR VITE COMPATIBILITY
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -27,14 +26,12 @@ export default function MyBills() {
     return "Rs. " + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // 🔥 MADE ASYNC to fetch lab details before drawing the PDF!
   const generatePDF = async (bill) => {
     const toastId = toast.loading("Generating your receipt...");
     try {
       const doc = new jsPDF();
       const billIdStr = (bill.bill_id || bill._id || '').toString().slice(-8).toUpperCase();
 
-      // Fetch Lab Test Names if this is a Master/Consultation Bill
       let labTestNames = "";
       if (['consultation', 'master'].includes(bill.bill_type) && bill.appointment_id) {
         try {
@@ -47,7 +44,6 @@ export default function MyBills() {
         }
       }
 
-      // Header
       doc.setFontSize(22);
       doc.setTextColor(41, 128, 185);
       doc.text("MediCare HMS", 105, 20, { align: "center" });
@@ -56,7 +52,6 @@ export default function MyBills() {
       doc.setTextColor(100, 100, 100);
       doc.text("Official Payment Receipt", 105, 28, { align: "center" });
 
-      // Patient Info
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
       doc.text(`Receipt No: #${billIdStr}`, 14, 45);
@@ -68,7 +63,6 @@ export default function MyBills() {
       let tableRows = [];
       let alignStyles = {}; 
 
-      // 1. PHARMACY BILL FORMAT
       if (bill.bill_type === 'pharmacy' && bill.items && bill.items.length > 0) {
         tableColumn = [
           { content: "Medicine Name", styles: { halign: 'left' } },
@@ -84,7 +78,6 @@ export default function MyBills() {
         ]);
         alignStyles = { 1: { halign: 'center' }, 2: { halign: 'right' }, 3: { halign: 'right', fontStyle: 'bold' } };
       } 
-      // 2. MASTER BILL / CONSULTATION FORMAT
       else if (bill.items && bill.items.length > 0) {
         tableColumn = [
           { content: "Description", styles: { halign: 'left' } },
@@ -92,20 +85,13 @@ export default function MyBills() {
         ];
         tableRows = bill.items.map(item => {
           let desc = item.item_name || item.description || 'Service Charge';
-          
-          // 🔥 INJECT LAB NAMES if it's the Lab Charges row
-          if (desc.includes('Laboratory') && labTestNames) {
+          if (desc.toLowerCase().includes('laboratory') && labTestNames) {
             desc += `\n(Tests: ${labTestNames})`;
           }
-
-          return [
-            desc,
-            formatPDFCurrency(item.price || item.amount || 0)
-          ];
+          return [desc, formatPDFCurrency(item.price || item.amount || 0)];
         });
         alignStyles = { 1: { halign: 'right' } };
       } 
-      // 3. FALLBACK
       else {
         tableColumn = [
           { content: "Description", styles: { halign: 'left' } },
@@ -117,7 +103,6 @@ export default function MyBills() {
         alignStyles = { 1: { halign: 'right' } };
       }
 
-      // Draw Table
       autoTable(doc, {
         startY: 65,
         head: [tableColumn],
@@ -128,9 +113,7 @@ export default function MyBills() {
         columnStyles: alignStyles
       });
 
-      // Footer & Total
       const finalY = doc.lastAutoTable?.finalY || 100;
-      
       doc.setDrawColor(200, 200, 200);
       doc.line(14, finalY + 8, 196, finalY + 8);
       
@@ -152,12 +135,13 @@ export default function MyBills() {
   };
 
   const generateLabResultPDF = async (bill) => {
+    const toastId = toast.loading("Fetching Lab Report...");
     try {
       const res = await api.get(`/patient/lab-reports?appointment_id=${bill.appointment_id}`);
       const reports = res.data;
 
       if (!reports || reports.length === 0) {
-        toast.error("No lab results found for this bill.");
+        toast.error("No completed lab results found for this bill.", { id: toastId });
         return;
       }
 
@@ -189,10 +173,10 @@ export default function MyBills() {
       doc.setFontSize(9);
       doc.text("This is a computer-generated report and does not require a physical signature.", 105, doc.lastAutoTable.finalY + 20, { align: "center" });
 
-      doc.save(`Lab_Report_${bill.appointment_id}.pdf`);
-      toast.success("Medical Report downloaded!");
+      doc.save(`Lab_Report_Appt_${bill.appointment_id}.pdf`);
+      toast.success("Medical Report downloaded!", { id: toastId });
     } catch (err) {
-      toast.error("Failed to fetch lab results.");
+      toast.error("Failed to fetch lab results.", { id: toastId });
     }
   };
 
@@ -203,7 +187,7 @@ export default function MyBills() {
 
   return (
     <div>
-      <PageHeader title="My Bills" subtitle="View and download your hospital receipts" />
+      <PageHeader title="My Bills" subtitle="View and download your hospital receipts and lab reports" />
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="card bg-blue-50 border-blue-100 p-4 rounded-xl">
@@ -238,40 +222,46 @@ export default function MyBills() {
                 </tr>
               </thead>
               <tbody>
-                {bills.map(bill => (
-                  <tr key={bill.bill_id || bill._id}>
-                    <td className="font-mono text-xs">#{(bill.bill_id || '').toString().slice(-8).toUpperCase()}</td>
-                    <td>{formatDate(bill.created_at)}</td>
-                    <td className="capitalize font-medium">{bill.bill_type}</td>
-                    <td className="font-semibold">{formatCurrency(bill.total_amount)}</td>
+                {bills.map(bill => {
+                  // 🔥 FIXED: Check if it's a lab bill, OR if the master bill contains a laboratory charge!
+                  const hasLabCharge = bill.bill_type === 'lab' || (bill.items && bill.items.some(item => (item.description || item.item_name || '').toLowerCase().includes('lab')));
 
-                    <td className="flex items-center gap-2">
-                      <StatusBadge status={bill.payment_status} />
+                  return (
+                    <tr key={bill.bill_id || bill._id}>
+                      <td className="font-mono text-xs">#{(bill.bill_id || '').toString().slice(-8).toUpperCase()}</td>
+                      <td>{formatDate(bill.created_at)}</td>
+                      <td className="capitalize font-medium">{bill.bill_type}</td>
+                      <td className="font-semibold">{formatCurrency(bill.total_amount)}</td>
 
-                      {(bill.payment_status || '').toLowerCase() === 'paid' && (
-                        <>
-                          <button
-                            onClick={() => generatePDF(bill)}
-                            className="p-1.5 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-600 hover:text-white transition-colors"
-                            title="Download Receipt"
-                          >
-                            <Download size={16} />
-                          </button>
+                      <td className="flex items-center gap-2">
+                        <StatusBadge status={bill.payment_status} />
 
-                          {bill.bill_type === 'lab' && (
+                        {(bill.payment_status || '').toLowerCase() === 'paid' && (
+                          <>
                             <button
-                              onClick={() => generateLabResultPDF(bill)}
-                              className="p-1.5 text-red-600 bg-red-50 rounded-lg hover:bg-red-600 hover:text-white transition-colors"
-                              title="Download Lab Report"
+                              onClick={() => generatePDF(bill)}
+                              className="p-1.5 text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-600 hover:text-white transition-colors"
+                              title="Download Receipt"
                             >
-                              <FileText size={16} />
+                              <Download size={16} />
                             </button>
-                          )}
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+
+                            {/* 🔥 FIXED: Show Lab Report Download button if a lab charge exists */}
+                            {hasLabCharge && bill.appointment_id && (
+                              <button
+                                onClick={() => generateLabResultPDF(bill)}
+                                className="p-1.5 text-red-600 bg-red-50 rounded-lg hover:bg-red-600 hover:text-white transition-colors"
+                                title="Download Lab Report"
+                              >
+                                <FileText size={16} />
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

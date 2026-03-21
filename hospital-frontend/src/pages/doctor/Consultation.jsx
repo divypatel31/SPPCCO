@@ -4,7 +4,10 @@ import { Spinner, StatusBadge } from '../../components/common';
 import { formatDate } from '../../utils/helpers';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Plus, Trash2, Pill, CheckCircle, FlaskConical, Lock, Play, Clock } from 'lucide-react';
+import { Plus, Trash2, Pill, CheckCircle, FlaskConical, Lock, Play, Clock, FileText, History } from 'lucide-react';
+
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function ConsultationPage() {
   const { id } = useParams();
@@ -16,7 +19,8 @@ export default function ConsultationPage() {
   const [activeTab, setActiveTab] = useState('consult');
   const [medicineList, setMedicineList] = useState([]);
   const [labTests, setLabTests] = useState([]);
-  const [saveStatus, setSaveStatus] = useState(''); // 🔥 Added for auto-save indicator
+  const [patientHistory, setPatientHistory] = useState([]); 
+  const [saveStatus, setSaveStatus] = useState(''); 
 
   const [consult, setConsult] = useState({
     symptoms: '',
@@ -27,17 +31,9 @@ export default function ConsultationPage() {
 
   const [medicines, setMedicines] = useState([
     {
-      medicine_id: '',
-      dose: '',
-      unit: 'tablet',
-      frequency: 0,
-      duration: '',
-      morning: false,
-      afternoon: false,
-      evening: false,
-      night: false,
-      food_timing: 'after_food',
-      instructions: ''
+      medicine_id: '', dose: '', unit: 'tablet', frequency: 0, duration: '',
+      morning: false, afternoon: false, evening: false, night: false,
+      food_timing: 'after_food', instructions: ''
     }
   ]);
 
@@ -51,7 +47,6 @@ export default function ConsultationPage() {
       .then(res => {
         setAppt(res.data);
         
-        // 🔥 Pre-fill auto-saved notes
         if (res.data.medical_record) {
           setConsult({
             symptoms: res.data.medical_record.symptoms || '',
@@ -61,7 +56,6 @@ export default function ConsultationPage() {
           });
         }
         
-        // 🔥 Pre-fill auto-saved medicines
         if (res.data.medicines && res.data.medicines.length > 0) {
           setMedicines(res.data.medicines);
         }
@@ -73,29 +67,26 @@ export default function ConsultationPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  /* Fetch medicines */
+  /* FETCH PATIENT HISTORY ON LOAD */
   useEffect(() => {
-    api.get('/pharmacy/medicine')
-      .then(res => setMedicineList(res.data || []))
-      .catch(err => {
-        console.log(err.response?.data);
-        toast.error('Failed to load medicines');
-      });
+    if (appt?.patient_id) {
+      api.get(`/doctor/patient-history/${appt.patient_id}?current_appt=${id}`)
+        .then(res => setPatientHistory(res.data || []))
+        .catch(() => console.error("Failed to load patient history"));
+    }
+  }, [appt?.patient_id, id]);
+
+  /* Fetch medicines & lab tests */
+  useEffect(() => {
+    api.get('/pharmacy/medicine').then(res => setMedicineList(res.data || [])).catch(() => {});
+    api.get('/test').then(res => setLabTests(res.data || [])).catch(() => {});
   }, []);
 
-  /* Fetch lab tests */
-  useEffect(() => {
-    api.get('/test')
-      .then(res => setLabTests(res.data || []))
-      .catch(() => toast.error("Failed to load lab tests"));
-  }, []);
-
-  /* 🔥 INVISIBLE AUTO-SAVE LOGIC (No Buttons!) */
+  /* INVISIBLE AUTO-SAVE LOGIC */
   useEffect(() => {
     const hasNotes = consult.symptoms || consult.diagnosis || consult.notes;
     const validMedicines = medicines.filter(med => med.medicine_id !== '');
 
-    // Skip if nothing is typed or if already completed
     if (!hasNotes && validMedicines.length === 0) return;
     if (appt?.status === 'completed') return;
 
@@ -103,7 +94,6 @@ export default function ConsultationPage() {
 
     const delayDebounceFn = setTimeout(async () => {
       try {
-        // Save Clinical Notes
         if (hasNotes) {
           await api.post('/doctor/medical-record', {
             appointment_id: id,
@@ -114,7 +104,6 @@ export default function ConsultationPage() {
           });
         }
 
-        // Save Prescriptions
         if (validMedicines.length > 0) {
           const formattedMedicines = validMedicines.map(med => ({
             ...med,
@@ -123,10 +112,7 @@ export default function ConsultationPage() {
             evening: med.evening ? 1 : 0,
             night: med.night ? 1 : 0
           }));
-          await api.post('/doctor/prescription', { 
-            appointment_id: id, 
-            medicines: formattedMedicines 
-          });
+          await api.post('/doctor/prescription', { appointment_id: id, medicines: formattedMedicines });
         }
 
         setSaveStatus('Saved');
@@ -134,7 +120,7 @@ export default function ConsultationPage() {
       } catch (err) {
         setSaveStatus('Failed to save');
       }
-    }, 1500); // Waits 1.5 seconds after you stop typing
+    }, 1500); 
 
     return () => clearTimeout(delayDebounceFn);
   }, [consult, medicines, id, appt?.status]);
@@ -147,20 +133,13 @@ export default function ConsultationPage() {
     setSaving(true);
     try {
       const finalMedicines = medicines.filter(med => med.medicine_id !== '');
-
       const formattedMedicines = finalMedicines.map(med => ({
         ...med,
-        morning: med.morning ? 1 : 0,
-        afternoon: med.afternoon ? 1 : 0,
-        evening: med.evening ? 1 : 0,
-        night: med.night ? 1 : 0
+        morning: med.morning ? 1 : 0, afternoon: med.afternoon ? 1 : 0,
+        evening: med.evening ? 1 : 0, night: med.night ? 1 : 0
       }));
 
-      await api.put(`/doctor/complete/${id}`, {
-        medicines: formattedMedicines,
-        ...consult
-      });
-
+      await api.put(`/doctor/complete/${id}`, { medicines: formattedMedicines, ...consult });
       toast.success('Consultation completed successfully!');
       navigate('/doctor/appointments');
     } catch (err) {
@@ -172,10 +151,7 @@ export default function ConsultationPage() {
 
   const saveLabRequest = async () => {
     const valid = labRequests.filter(l => l.test);
-    if (valid.length === 0) {
-      toast.error('Select at least one test');
-      return;
-    }
+    if (valid.length === 0) return toast.error('Select at least one test');
 
     setSaving(true);
     try {
@@ -185,11 +161,14 @@ export default function ConsultationPage() {
           appointment_id: id,
           test_name: selectedTest.name,
           department: selectedTest.department,
-          test_price: selectedTest.price // 🔥 FIXED THE LAB 500 ERROR
+          test_price: selectedTest.price 
         });
       }
       toast.success('Lab request sent!');
       setLabRequests([{ test: '' }]);
+      
+      const res = await api.get(`/doctor/appointments/${id}`);
+      setAppt(res.data);
     } catch (err) {
       toast.error('Failed to submit lab request');
     } finally {
@@ -197,20 +176,49 @@ export default function ConsultationPage() {
     }
   };
 
-  const addMedicineRow = () =>
-    setMedicines([...medicines, { 
-      medicine_id: '', dose: '', unit: 'tablet', frequency: 0, duration: '', 
-      morning: false, afternoon: false, evening: false, night: false, 
-      food_timing: 'after_food', instructions: '' 
-    }]);
+  const downloadLabPDF = (result, pastDoctorName = null) => {
+    try {
+      const doc = new jsPDF();
+      
+      doc.setFontSize(22);
+      doc.setTextColor(231, 76, 60);
+      doc.text("MediCare Pathology Lab", 105, 20, { align: "center" });
 
+      doc.setFontSize(12);
+      doc.setTextColor(50, 50, 50);
+      doc.text("Official Laboratory Report", 105, 28, { align: "center" });
+
+      doc.setFontSize(10);
+      doc.setTextColor(0, 0, 0);
+      doc.text(`Patient: ${appt.patient_name}`, 14, 45);
+      doc.text(`Doctor: Dr. ${pastDoctorName || appt.doctor_name || 'Assigned'}`, 14, 52);
+      doc.text(`Date: ${formatDate(new Date())}`, 130, 45);
+
+      const tableColumn = ["Test Name", "Result / Findings"];
+      const tableRows = [[result.test_name, result.result || "No findings recorded"]];
+
+      autoTable(doc, {
+        startY: 65, head: [tableColumn], body: tableRows,
+        theme: 'grid', headStyles: { fillColor: [231, 76, 60] },
+      });
+
+      doc.setFontSize(9);
+      doc.text("This is a computer-generated report and does not require a physical signature.", 105, doc.lastAutoTable.finalY + 20, { align: "center" });
+
+      doc.save(`Lab_Report_${result.test_name.replace(/\s+/g, '_')}_${appt.patient_name}.pdf`);
+      toast.success("Lab Report downloaded!");
+    } catch (err) {
+      toast.error("Error generating PDF");
+    }
+  };
+
+  const addMedicineRow = () => setMedicines([...medicines, { medicine_id: '', dose: '', unit: 'tablet', frequency: 0, duration: '', morning: false, afternoon: false, evening: false, night: false, food_timing: 'after_food', instructions: '' }]);
   const removeMedicineRow = (i) => setMedicines(medicines.filter((_, idx) => idx !== i));
 
   const updateMedicine = (i, field, val) => {
     const updated = [...medicines];
     updated[i][field] = val;
 
-    // 🔥 FIX 3.1: Auto-select unit when medicine is chosen
     if (field === 'medicine_id' && val !== '') {
       const selectedMed = medicineList.find(m => m.medicine_id === Number(val));
       if (selectedMed) {
@@ -225,26 +233,26 @@ export default function ConsultationPage() {
 
     if (['morning', 'afternoon', 'evening', 'night'].includes(field)) {
       const med = updated[i];
-      const freq = (med.morning ? 1 : 0) + (med.afternoon ? 1 : 0) + (med.evening ? 1 : 0) + (med.night ? 1 : 0);
-      updated[i].frequency = freq;
+      updated[i].frequency = (med.morning ? 1 : 0) + (med.afternoon ? 1 : 0) + (med.evening ? 1 : 0) + (med.night ? 1 : 0);
     }
-
     setMedicines(updated);
   };
 
   const addLabRow = () => setLabRequests([...labRequests, { test: '' }]);
-
-  const updateLab = (i, val) => {
-    const updated = [...labRequests];
-    updated[i].test = val;
-    setLabRequests(updated);
-  };
+  const updateLab = (i, val) => { const updated = [...labRequests]; updated[i].test = val; setLabRequests(updated); };
 
   if (loading) return <Spinner />;
   if (!appt) return <div className="card text-center py-12">Appointment not found.</div>;
 
   const isCompleted = appt.status === 'completed';
   const isLocked = appt.status === 'arrived'; 
+
+  const tabs = [
+    { id: 'consult', label: 'Consult' },
+    { id: 'prescription', label: 'Prescription' },
+    { id: 'lab', label: 'Lab Tests' },
+    { id: 'history', label: 'History' } 
+  ];
 
   return (
     <div>
@@ -260,7 +268,6 @@ export default function ConsultationPage() {
         <div className="flex items-center gap-3">
           <StatusBadge status={appt.status} />
 
-          {/* START CONSULTATION BUTTON */}
           {appt.status === 'arrived' && (
             <button
               onClick={async () => {
@@ -268,9 +275,7 @@ export default function ConsultationPage() {
                   await api.put(`/doctor/start/${id}`);
                   toast.success("Consultation started!");
                   setAppt(prev => ({ ...prev, status: 'in_consultation' }));
-                } catch (err) {
-                  toast.error(err.response?.data?.message || "Failed to start");
-                }
+                } catch (err) { toast.error("Failed to start"); }
               }}
               className="btn-primary flex items-center gap-2"
             >
@@ -278,15 +283,9 @@ export default function ConsultationPage() {
             </button>
           )}
 
-          {/* COMPLETE CONSULTATION BUTTON */}
           {appt.status === 'in_consultation' && (
-            <button
-              onClick={completeConsultation}
-              disabled={saving}
-              className="btn-success flex items-center gap-2"
-            >
-              <CheckCircle size={16} />
-              {saving ? 'Processing...' : 'Complete'}
+            <button onClick={completeConsultation} disabled={saving} className="btn-success flex items-center gap-2">
+              <CheckCircle size={16} /> {saving ? 'Processing...' : 'Complete'}
             </button>
           )}
         </div>
@@ -294,69 +293,38 @@ export default function ConsultationPage() {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
-        {['consult', 'prescription', 'lab'].map(tab => (
+        {tabs.map(tab => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 rounded capitalize font-medium transition-colors ${
-              activeTab === tab ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-600 border hover:bg-gray-50'
-            }`}
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 rounded font-medium transition-colors ${activeTab === tab.id ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-600 border hover:bg-gray-50'}`}
           >
-            {tab}
+            {tab.label}
           </button>
         ))}
-
-        {/* Auto-Save Indicator */}
-        {!isCompleted && saveStatus && (
-          <div className="ml-auto self-center text-xs font-bold text-gray-400">
-            <span className={saveStatus === 'Failed to save' ? 'text-red-500' : 'text-blue-500'}>
-              {saveStatus}
-            </span>
-          </div>
-        )}
+        {!isCompleted && saveStatus && <div className="ml-auto self-center text-xs font-bold text-gray-400"><span className={saveStatus === 'Failed to save' ? 'text-red-500' : 'text-blue-500'}>{saveStatus}</span></div>}
       </div>
 
       {/* Main Content Area */}
       <div className="relative">
-        {/* OVERLAY FOR LOCKED STATE */}
-        {isLocked && (
+        {isLocked && activeTab !== 'history' && (
           <div className="absolute inset-0 z-50 bg-white/60 backdrop-blur-[2px] flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300">
             <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 text-center max-w-sm">
-              <div className="w-12 h-12 bg-yellow-50 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Lock size={24} />
-              </div>
+              <div className="w-12 h-12 bg-yellow-50 text-yellow-600 rounded-full flex items-center justify-center mx-auto mb-4"><Lock size={24} /></div>
               <h2 className="text-lg font-bold text-gray-900 mb-1">Consultation Locked</h2>
-              <p className="text-sm text-gray-500">Please click the <strong>Start</strong> button above to begin.</p>
+              <p className="text-sm text-gray-500">Please click the <strong>Start</strong> button above to begin filling records.</p>
             </div>
           </div>
         )}
 
-        <div className={isLocked ? 'opacity-30 pointer-events-none select-none' : 'opacity-100 transition-opacity'}>
+        <div className={isLocked && activeTab !== 'history' ? 'opacity-30 pointer-events-none select-none' : 'opacity-100 transition-opacity'}>
 
           {/* CONSULT TAB */}
           {activeTab === 'consult' && (
             <div className="card space-y-4">
-              <textarea
-                placeholder="Symptoms"
-                className="input-field min-h-[100px]"
-                disabled={isCompleted}
-                value={consult.symptoms}
-                onChange={e => setConsult({ ...consult, symptoms: e.target.value })}
-              />
-              <input
-                placeholder="Diagnosis"
-                className="input-field"
-                disabled={isCompleted}
-                value={consult.diagnosis}
-                onChange={e => setConsult({ ...consult, diagnosis: e.target.value })}
-              />
-              <textarea
-                placeholder="Additional Notes"
-                className="input-field min-h-[80px]"
-                disabled={isCompleted}
-                value={consult.notes}
-                onChange={e => setConsult({ ...consult, notes: e.target.value })}
-              />
+              <textarea placeholder="Symptoms" className="input-field min-h-[100px]" disabled={isCompleted} value={consult.symptoms} onChange={e => setConsult({ ...consult, symptoms: e.target.value })} />
+              <input placeholder="Diagnosis" className="input-field" disabled={isCompleted} value={consult.diagnosis} onChange={e => setConsult({ ...consult, diagnosis: e.target.value })} />
+              <textarea placeholder="Additional Notes" className="input-field min-h-[80px]" disabled={isCompleted} value={consult.notes} onChange={e => setConsult({ ...consult, notes: e.target.value })} />
             </div>
           )}
 
@@ -364,166 +332,82 @@ export default function ConsultationPage() {
           {activeTab === 'prescription' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                  <Pill className="text-blue-600" size={20} /> Prescribe Medicines
-                </h3>
-                <p className="text-xs text-gray-500 italic">* Leave empty if no medicine required.</p>
+                <h3 className="font-bold text-gray-800 flex items-center gap-2"><Pill className="text-blue-600" size={20} /> Prescribe Medicines</h3>
               </div>
 
               {medicines.map((med, i) => (
-                <div key={i} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative">
-                  
-                  {/* Top Row: Medicine, Dose, Unit, Days */}
+                <div key={`med-${i}`} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative">
                   <div className="grid grid-cols-12 gap-4 mb-4">
                     <div className="col-span-12 md:col-span-4">
                       <label className="text-xs text-gray-500 font-bold uppercase mb-1 block">Medicine</label>
-                      <select 
-                        className="input-field py-2"
-                        disabled={isCompleted}
-                        value={med.medicine_id}
-                        onChange={e => updateMedicine(i, 'medicine_id', e.target.value)}
-                      >
+                      <select className="input-field py-2" disabled={isCompleted} value={med.medicine_id} onChange={e => updateMedicine(i, 'medicine_id', e.target.value)}>
                         <option value="">Select Medicine...</option>
-                        {medicineList.map(m => (
-                          <option key={m.medicine_id} value={m.medicine_id}>{m.name}</option>
-                        ))}
+                        {medicineList.map(m => <option key={m.medicine_id} value={m.medicine_id}>{m.name}</option>)}
                       </select>
                     </div>
 
                     <div className="col-span-4 md:col-span-2">
                       <label className="text-xs text-gray-500 font-bold uppercase mb-1 block">Dose</label>
-                      <input 
-                        type="number" 
-                        step="0.5"
-                        className="input-field py-2"
-                        disabled={isCompleted}
-                        value={med.dose} 
-                        onChange={e => updateMedicine(i, 'dose', e.target.value)}
-                        placeholder="e.g. 1"
-                      />
+                      <input type="number" step="0.5" className="input-field py-2" disabled={isCompleted} value={med.dose} onChange={e => updateMedicine(i, 'dose', e.target.value)} />
                     </div>
 
                     <div className="col-span-4 md:col-span-2">
                       <label className="text-xs text-gray-500 font-bold uppercase mb-1 block">Unit</label>
-                      <select 
-                        className="input-field py-2"
-                        disabled={isCompleted}
-                        value={med.unit}
-                        onChange={e => updateMedicine(i, 'unit', e.target.value)}
-                      >
-                        <option value="tablet">Tablet(s)</option>
-                        <option value="ml">ml</option>
-                        <option value="drop">Drop(s)</option>
-                        <option value="mg">mg</option>
-                        <option value="tube">Tube</option>
+                      <select className="input-field py-2" disabled={isCompleted} value={med.unit} onChange={e => updateMedicine(i, 'unit', e.target.value)}>
+                        <option value="tablet">Tablet(s)</option><option value="ml">ml</option><option value="drop">Drop(s)</option><option value="mg">mg</option><option value="tube">Tube</option>
                       </select>
                     </div>
 
                     <div className="col-span-4 md:col-span-3">
                       <label className="text-xs text-gray-500 font-bold uppercase mb-1 block">Duration</label>
                       <div className="flex items-center gap-2">
-                        <input 
-                          type="number" 
-                          className="input-field py-2"
-                          disabled={isCompleted}
-                          value={med.duration} 
-                          onChange={e => updateMedicine(i, 'duration', e.target.value)}
-                          placeholder="Days"
-                        />
+                        <input type="number" className="input-field py-2" disabled={isCompleted} value={med.duration} onChange={e => updateMedicine(i, 'duration', e.target.value)} />
                         <span className="text-sm font-medium text-gray-500">Days</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Middle Row: Timings & Food */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center bg-gray-50 p-3 rounded-lg border border-gray-100">
-                    
-                    {/* Checkboxes for Time of Day */}
                     <div>
-                      <label className="text-xs text-gray-500 font-bold uppercase mb-2 flex items-center gap-1">
-                        <Clock size={14} /> Schedule
-                      </label>
+                      <label className="text-xs text-gray-500 font-bold uppercase mb-2 flex items-center gap-1"><Clock size={14} /> Schedule</label>
                       <div className="flex flex-wrap gap-4">
                         {['morning', 'afternoon', 'evening', 'night'].map(time => (
                           <label key={time} className="flex items-center gap-2 cursor-pointer select-none">
-                            <input 
-                              type="checkbox" 
-                              className="w-4 h-4 text-blue-600 rounded cursor-pointer"
-                              disabled={isCompleted}
-                              checked={med[time]}
-                              onChange={e => updateMedicine(i, time, e.target.checked)}
-                            />
+                            <input type="checkbox" className="w-4 h-4 text-blue-600 rounded cursor-pointer" disabled={isCompleted} checked={med[time]} onChange={e => updateMedicine(i, time, e.target.checked)} />
                             <span className="text-sm font-medium text-gray-700 capitalize">{time}</span>
                           </label>
                         ))}
                       </div>
                     </div>
 
-                    {/* Food Timing */}
                     <div>
                       <label className="text-xs text-gray-500 font-bold uppercase mb-2 block">Food Timing</label>
                       <div className="flex gap-4">
                         <label className="flex items-center gap-2 cursor-pointer select-none">
-                          <input 
-                            type="radio" 
-                            name={`food_${i}`} 
-                            className="w-4 h-4 text-blue-600 cursor-pointer"
-                            disabled={isCompleted}
-                            checked={med.food_timing === 'before_food'}
-                            onChange={() => updateMedicine(i, 'food_timing', 'before_food')}
-                          />
+                          <input type="radio" name={`food_${i}`} className="w-4 h-4 text-blue-600 cursor-pointer" disabled={isCompleted} checked={med.food_timing === 'before_food'} onChange={() => updateMedicine(i, 'food_timing', 'before_food')} />
                           <span className="text-sm font-medium text-gray-700">Before Food</span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer select-none">
-                          <input 
-                            type="radio" 
-                            name={`food_${i}`} 
-                            className="w-4 h-4 text-blue-600 cursor-pointer"
-                            disabled={isCompleted}
-                            checked={med.food_timing === 'after_food'}
-                            onChange={() => updateMedicine(i, 'food_timing', 'after_food')}
-                          />
+                          <input type="radio" name={`food_${i}`} className="w-4 h-4 text-blue-600 cursor-pointer" disabled={isCompleted} checked={med.food_timing === 'after_food'} onChange={() => updateMedicine(i, 'food_timing', 'after_food')} />
                           <span className="text-sm font-medium text-gray-700">After Food</span>
                         </label>
                       </div>
                     </div>
                   </div>
 
-                  {/* Bottom Row: Instructions & Remove */}
                   <div className="mt-4 flex gap-4 items-end">
                     <div className="flex-1">
-                      <input 
-                        type="text" 
-                        className="input-field py-2 text-sm"
-                        disabled={isCompleted}
-                        value={med.instructions} 
-                        onChange={e => updateMedicine(i, 'instructions', e.target.value)}
-                        placeholder="Additional instructions (e.g. Take with warm water)..."
-                      />
+                      <input type="text" className="input-field py-2 text-sm" disabled={isCompleted} value={med.instructions} onChange={e => updateMedicine(i, 'instructions', e.target.value)} placeholder="Additional instructions..." />
                     </div>
-                    
                     {!isCompleted && medicines.length > 1 && (
-                      <button 
-                        type="button" 
-                        onClick={() => removeMedicineRow(i)}
-                        className="p-2.5 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
-                        title="Remove Medicine"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <button type="button" onClick={() => removeMedicineRow(i)} className="p-2.5 bg-red-50 text-red-500 rounded-lg"><Trash2 size={18} /></button>
                     )}
                   </div>
                 </div>
               ))}
 
               {!isCompleted && (
-                <button 
-                  type="button"
-                  onClick={addMedicineRow}
-                  className="w-full py-3 mt-2 border-2 border-dashed border-blue-200 text-blue-600 font-semibold rounded-xl flex items-center justify-center gap-2 hover:bg-blue-50 transition-colors"
-                >
-                  <Plus size={18} /> Add Another Medicine
-                </button>
+                <button type="button" onClick={addMedicineRow} className="w-full py-3 mt-2 border-2 border-dashed border-blue-200 text-blue-600 font-semibold rounded-xl flex items-center justify-center gap-2"><Plus size={18} /> Add Another Medicine</button>
               )}
             </div>
           )}
@@ -532,17 +416,13 @@ export default function ConsultationPage() {
           {activeTab === 'lab' && (
             <div className="card space-y-3">
               {labRequests.map((req, i) => (
-                <div key={i} className="grid grid-cols-2 gap-2">
+                <div key={`req-${i}`} className="grid grid-cols-2 gap-2">
                   <select className="input-field" disabled={isCompleted} value={req.test} onChange={e => updateLab(i, e.target.value)}>
                     <option value="">Select Test</option>
-                    {labTests.map(test => (
-                      <option key={test.lab_test_id} value={test.lab_test_id}>{test.name} - ₹{test.price}</option>
-                    ))}
+                    {labTests.map(test => <option key={`test-${test.lab_test_id}`} value={test.lab_test_id}>{test.name} - ₹{test.price}</option>)}
                   </select>
                   {!isCompleted && (
-                    <button onClick={() => setLabRequests(labRequests.filter((_, idx) => idx !== i))} className="text-red-500">
-                      <Trash2 size={16} />
-                    </button>
+                    <button onClick={() => setLabRequests(labRequests.filter((_, idx) => idx !== i))} className="text-red-500"><Trash2 size={16} /></button>
                   )}
                 </div>
               ))}
@@ -557,12 +437,25 @@ export default function ConsultationPage() {
 
               <h3 className="font-semibold mt-8 border-t pt-4">Previous Lab Results</h3>
               {appt.lab_results?.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-                  {appt.lab_results.map(result => (
-                    <div key={result.request_id} className="p-3 bg-gray-50 rounded-lg border mb-2 text-sm">
-                      <p><strong>Test:</strong> {result.test_name}</p>
-                      <p><strong>Status:</strong> {result.status}</p>
-                      {result.status === 'completed' && <p className="text-teal-700 whitespace-pre-wrap"><strong>Result:</strong><br/>{result.result}</p>}
+                <div className="grid grid-cols-1 gap-3 mt-2">
+                  {appt.lab_results.map((result, index) => (
+                    <div key={`lab-${result.request_id}-${index}`} className="p-4 bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col gap-3">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="font-bold text-gray-900">{result.test_name}</p>
+                          <p className="text-xs text-gray-500 mt-1">Requested: {formatDate(result.updated_at || result.created_at || new Date())}</p>
+                        </div>
+                        <StatusBadge status={result.status} />
+                      </div>
+
+                      {result.status === 'completed' && (
+                        <div className="mt-2 pt-3 border-t border-gray-100 flex items-center justify-between">
+                          <p className="text-sm text-gray-600 line-clamp-1 flex-1 pr-4"><strong>Findings:</strong> {result.result}</p>
+                          <button onClick={() => downloadLabPDF(result)} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 hover:bg-red-600 hover:text-white rounded-lg text-xs font-bold transition-colors">
+                            <FileText size={14} /> Download PDF
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -571,6 +464,115 @@ export default function ConsultationPage() {
               )}
             </div>
           )}
+
+          {/* HISTORY TAB */}
+          {activeTab === 'history' && (
+            <div className="space-y-4">
+              <h3 className="font-bold text-gray-800 flex items-center gap-2 mb-4">
+                <History className="text-blue-600" size={20} /> Past Medical Records
+              </h3>
+              
+              {patientHistory.length === 0 ? (
+                <div className="card bg-gray-50 border-gray-100 text-center py-10">
+                  <p className="text-gray-500">No past medical history found for this patient.</p>
+                </div>
+              ) : (
+                patientHistory.map((record, index) => (
+                  <div key={`history-${record.appointment_id}-${index}`} className="card p-5 bg-white shadow-sm border border-gray-200 mb-4 hover:border-blue-300 transition-colors">
+                    <div className="flex justify-between items-start mb-4 border-b border-gray-100 pb-3">
+                      <div>
+                        <p className="font-bold text-gray-900 text-lg">{formatDate(record.appointment_date)}</p>
+                        <p className="text-sm text-blue-600 font-medium">Dr. {record.doctor_name} ({record.department})</p>
+                      </div>
+                    </div>
+                    
+                    <div className="grid md:grid-cols-2 gap-x-6 gap-y-4">
+                      <div>
+                        <p className="text-xs text-gray-500 font-bold uppercase mb-1">Symptoms</p>
+                        <p className="text-sm text-gray-800 bg-gray-50 p-2 rounded">{record.symptoms || 'None recorded'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 font-bold uppercase mb-1">Diagnosis</p>
+                        <p className="text-sm text-gray-800 bg-gray-50 p-2 rounded font-medium">{record.diagnosis || 'None recorded'}</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <p className="text-xs text-gray-500 font-bold uppercase mb-1">Clinical Notes</p>
+                        <p className="text-sm text-gray-800 bg-gray-50 p-3 rounded whitespace-pre-wrap">{record.clinical_notes || 'None recorded'}</p>
+                      </div>
+                    </div>
+
+                    {/* 🔥 NEW: DISPLAY PRESCRIBED MEDICINES IN HISTORY */}
+                    {record.medicines && record.medicines.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <p className="text-xs text-gray-500 font-bold uppercase mb-2 flex items-center gap-1">
+                          <Pill size={14} className="text-green-600" /> Prescribed Medicines
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {record.medicines.map((med, mIdx) => {
+                            // Build a quick schedule string (e.g., "Morn-Night")
+                            const schedule = [];
+                            if (med.morning) schedule.push('Morn');
+                            if (med.afternoon) schedule.push('Aft');
+                            if (med.evening) schedule.push('Eve');
+                            if (med.night) schedule.push('Night');
+                            const scheduleText = schedule.length > 0 ? schedule.join('-') : 'As needed';
+
+                            return (
+                              <div key={`hist-med-${med.medicine_id}-${mIdx}`} className="bg-green-50/50 p-3 rounded-lg border border-green-100 flex flex-col gap-1">
+                                <div className="flex justify-between items-start">
+                                  <span className="font-bold text-green-900 text-sm">{med.medicine_name}</span>
+                                  <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded">
+                                    {med.duration} Days
+                                  </span>
+                                </div>
+                                <div className="text-xs text-gray-600 font-medium">
+                                  {med.dose} {med.unit} | <span className="text-gray-500 capitalize">{med.food_timing?.replace('_', ' ')}</span> | {scheduleText}
+                                </div>
+                                {med.instructions && (
+                                  <div className="text-xs text-gray-500 italic mt-1 border-t border-green-100 pt-1">
+                                    "{med.instructions}"
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* DISPLAY PAST LAB RESULTS IN HISTORY */}
+                    {record.lab_results && record.lab_results.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <p className="text-xs text-gray-500 font-bold uppercase mb-2 flex items-center gap-1">
+                          <FlaskConical size={14} className="text-blue-600" /> Associated Lab Results
+                        </p>
+                        <div className="flex flex-col gap-2">
+                          {record.lab_results.map((lab, lIdx) => (
+                            <div key={`hist-lab-${lab.request_id}-${lIdx}`} className="text-sm bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex justify-between items-center">
+                              <div>
+                                <span className="font-semibold text-blue-900">{lab.test_name}</span>
+                                <span className="mx-2 text-gray-400">|</span>
+                                <span className="text-gray-700">{lab.result || 'Pending / No findings'}</span>
+                              </div>
+                              {lab.status === 'completed' && (
+                                <button
+                                  onClick={() => downloadLabPDF(lab, record.doctor_name)}
+                                  className="text-xs px-2 py-1 bg-white text-blue-600 border border-blue-200 hover:bg-blue-600 hover:text-white rounded transition-colors font-bold flex items-center gap-1"
+                                >
+                                  <FileText size={12} /> PDF
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
         </div>
       </div>
     </div>

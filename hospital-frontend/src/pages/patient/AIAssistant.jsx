@@ -2,13 +2,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import { PageHeader } from '../../components/common';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Bot, Send, User, Sparkles, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Bot, Send, User, Sparkles, AlertTriangle, CalendarDays } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
 export default function AIAssistant() {
   const [messages, setMessages] = useState([
-    { sender: 'ai', text: "Hello! I am your Private Hospital AI Assistant. You can tell me about your symptoms, ask medical questions, or get advice on which department to book an appointment for. How can I help you today?" }
+    { sender: 'ai', text: "Hello! I am your Autonomous Medical Agent. You can tell me your symptoms, and I can directly check doctor availability and book an appointment for you! How can I help you today?" }
   ]);
+  
+  // 🔥 REQUIRED FOR GEMINI: Stores the conversational history so the AI remembers the context
+  const [chatHistory, setChatHistory] = useState([]);
+  
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
@@ -28,11 +32,21 @@ export default function AIAssistant() {
     setLoading(true);
 
     try {
-      const res = await api.post('/ai/chat', { prompt: userMessage.text });
+      // Send both the prompt AND the history to the backend
+      const res = await api.post('/ai/chat', { 
+        prompt: userMessage.text,
+        history: chatHistory
+      });
+      
       setMessages(prev => [...prev, { sender: 'ai', text: res.data.reply }]);
+      
+      // Update the history with the backend's response so Gemini doesn't forget
+      if (res.data.history) {
+        setChatHistory(res.data.history);
+      }
     } catch (err) {
-      toast.error("AI server is offline.");
-      setMessages(prev => [...prev, { sender: 'ai', text: "Sorry, I am currently offline. Please make sure the local Ollama server is running." }]);
+      toast.error("AI server error.");
+      setMessages(prev => [...prev, { sender: 'ai', text: "Sorry, I am having trouble connecting to the booking system right now. Please try again in a few seconds." }]);
     } finally {
       setLoading(false);
     }
@@ -41,26 +55,26 @@ export default function AIAssistant() {
   return (
     <div className="flex flex-col h-[calc(100vh-120px)] max-h-[800px]">
       <PageHeader 
-        title="AI Symptom Checker & Assistant" 
-        subtitle="Get instant, private answers to your medical queries using Local AI"
+        title="Autonomous AI Agent" 
+        subtitle="Chat with AI to instantly triage symptoms and book your appointments"
       />
 
-      {/* Disclaimers */}
+      {/* Disclaimers & Info Badges */}
       <div className="grid sm:grid-cols-2 gap-4 mb-4">
         <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg shadow-sm flex gap-3">
           <AlertTriangle className="text-yellow-500 shrink-0 mt-0.5" size={20} />
           <div>
             <p className="text-sm font-bold text-yellow-800">Important Disclaimer</p>
-            <p className="text-xs text-yellow-700 mt-1">This AI is for informational purposes only. It is not a replacement for professional medical diagnosis. In emergencies, call an ambulance immediately.</p>
+            <p className="text-xs text-yellow-700 mt-1">This AI is for informational and booking purposes only. It is not a replacement for professional medical diagnosis. In emergencies, call an ambulance immediately.</p>
           </div>
         </div>
 
-        {/* Privacy Badge for Ollama */}
-        <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded-r-lg shadow-sm flex gap-3">
-          <ShieldCheck className="text-green-600 shrink-0 mt-0.5" size={20} />
+        {/* Updated Badge for Smart Auto-Booking */}
+        <div className="bg-teal-50 border-l-4 border-teal-500 p-4 rounded-r-lg shadow-sm flex gap-3">
+          <CalendarDays className="text-teal-600 shrink-0 mt-0.5" size={20} />
           <div>
-            <p className="text-sm font-bold text-green-900">100% Data Privacy</p>
-            <p className="text-xs text-green-800 mt-1">This AI runs entirely locally on hospital servers. Your medical queries are never sent to the cloud, Google, or OpenAI.</p>
+            <p className="text-sm font-bold text-teal-900">Smart Auto-Booking</p>
+            <p className="text-xs text-teal-800 mt-1">This agent is connected directly to the hospital database. It can check doctor schedules and seamlessly book appointments for you in this chat.</p>
           </div>
         </div>
       </div>
@@ -73,9 +87,9 @@ export default function AIAssistant() {
             <Bot size={20} className="text-teal-50" />
           </div>
           <div>
-            <h2 className="font-bold">MediCare AI</h2>
+            <h2 className="font-bold">MediCare AI Agent</h2>
             <p className="text-xs text-teal-200 font-medium flex items-center gap-1">
-              <Sparkles size={12} /> Powered by Local Llama 3
+              <Sparkles size={12} /> Powered by Gemini 2.5 Flash
             </p>
           </div>
         </div>
@@ -93,7 +107,6 @@ export default function AIAssistant() {
                 {msg.sender === 'user' ? (
                   msg.text
                 ) : (
-                  // 🔥 FIXED: Wrapped ReactMarkdown inside a normal div!
                   <div className="prose prose-sm prose-teal max-w-none">
                     <ReactMarkdown>
                       {msg.text}
@@ -125,7 +138,7 @@ export default function AIAssistant() {
           <input
             type="text"
             className="flex-1 border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 transition-all bg-gray-50 hover:bg-white"
-            placeholder="Type your symptoms or medical questions here..."
+            placeholder="Tell me your symptoms or ask to book an appointment..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={loading}

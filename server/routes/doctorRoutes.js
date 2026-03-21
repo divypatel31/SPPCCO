@@ -17,5 +17,6 @@ router.post("/lab-request", doctorController.addLabRequest);
 router.put("/complete/:id", doctorController.completeConsultation);
 router.put("/cancel/:id", doctorController.cancelAppointment);
 router.get("/my-schedule", doctorController.getMySchedule);
+router.get("/patient-history/:patientId", doctorController.getPatientHistory);
 
 module.exports = router;

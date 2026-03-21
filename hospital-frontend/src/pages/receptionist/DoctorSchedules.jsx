@@ -33,7 +33,7 @@ export default function DoctorSchedules() {
     api.get('/receptionist/all-doctors')
       .then(res => {
         setDoctors(res.data || []);
-        if (res.data?.length > 0) setSelectedDoctor(res.data[0].user_id);
+        // 🔥 FIXED: Removed the auto-select so it starts blank!
       })
       .catch(() => toast.error("Failed to load doctors"))
       .finally(() => setLoading(false));
@@ -62,6 +62,8 @@ export default function DoctorSchedules() {
             value={selectedDoctor}
             onChange={(e) => setSelectedDoctor(e.target.value)}
           >
+            {/* 🔥 FIXED: Added a default empty option */}
+            <option value="">-- Select a Doctor --</option>
             {doctors.map(doc => (
               <option key={doc.user_id} value={doc.user_id}>
                 Dr. {doc.full_name} ({doc.department})
