@@ -3,6 +3,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
+// Public Pages
+import LandingPage from './pages/public/LandingPage';
+import PrivacyPolicy from './pages/public/legal/PrivacyPolicy';
+import TermsOfService from './pages/public/legal/TermsOfService';
+import PatientRights from './pages/public/legal/PatientRights';
+
 // Auth Pages
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
@@ -51,29 +57,34 @@ import SystemSettings from "./pages/admin/SystemSettings";
 // Layout
 import DashboardLayout from './components/layout/DashboardLayout';
 
-// Common Pages (Available to multiple roles)
+// Common Pages
 import StaffProfile from './pages/common/StaffProfile';
 import Contact from './pages/common/Contact';
 
 // Protected Route component
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
+  
   if (loading) return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+    <div className="flex items-center justify-center h-screen bg-slate-50">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
     </div>
   );
+  
   if (!user) return <Navigate to="/login" replace />;
+  
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to="/unauthorized" replace />;
   }
+  
   return children;
 };
 
-// Role-based redirect after login
+// Role-based redirect
 const RoleRedirect = () => {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
+  
   const map = {
     patient: '/patient/dashboard',
     doctor: '/doctor/dashboard',
@@ -82,6 +93,7 @@ const RoleRedirect = () => {
     pharmacist: '/pharmacist/dashboard',
     admin: '/admin/dashboard',
   };
+  
   return <Navigate to={map[user.role] || '/login'} replace />;
 };
 
@@ -91,30 +103,32 @@ function App() {
       <BrowserRouter>
         <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
         <Routes>
-          {/* Public */}
-          <Route path="/" element={<RoleRedirect />} />
+          {/* Public & Legal Routes */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/patient-rights" element={<PatientRights />} />
+          
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           
+          <Route path="/dashboard" element={<RoleRedirect />} />
+          
           <Route path="/unauthorized" element={
-            <div className="flex items-center justify-center h-screen">
-              <div className="text-center">
-                <h1 className="text-3xl font-bold text-red-600">Unauthorized Access</h1>
-                <p className="text-gray-500 mt-2">You don't have permission to view this page.</p>
+            <div className="flex items-center justify-center h-screen bg-slate-50">
+              <div className="text-center p-8 bg-white rounded-2xl shadow-sm border border-slate-100">
+                <h1 className="text-3xl font-bold text-rose-600">Unauthorized Access</h1>
+                <p className="text-slate-500 mt-2">You don't have permission to view this page.</p>
               </div>
             </div>
           } />
 
           {/* Patient Routes */}
-          <Route path="/patient" element={
-            <ProtectedRoute allowedRoles={['patient']}>
-              <DashboardLayout role="patient" />
-            </ProtectedRoute>
-          }>
+          <Route path="/patient" element={<ProtectedRoute allowedRoles={['patient']}><DashboardLayout role="patient" /></ProtectedRoute>}>
             <Route path="dashboard" element={<PatientDashboard />} />
             <Route path="profile" element={<PatientProfile />} />
             <Route path="book-appointment" element={<BookAppointment />} />
-            <Route path="ai-assistant" element={<AIAssistant />} /> {/* 🔥 NEW AI ROUTE */}
+            <Route path="ai-assistant" element={<AIAssistant />} />
             <Route path="appointments" element={<MyAppointments />} />
             <Route path="bills" element={<MyBills />} />
             <Route path="prescriptions" element={<MyPrescriptions />} />
@@ -122,11 +136,7 @@ function App() {
           </Route>
 
           {/* Doctor Routes */}
-          <Route path="/doctor" element={
-            <ProtectedRoute allowedRoles={['doctor']}>
-              <DashboardLayout role="doctor" />
-            </ProtectedRoute>
-          }>
+          <Route path="/doctor" element={<ProtectedRoute allowedRoles={['doctor']}><DashboardLayout role="doctor" /></ProtectedRoute>}>
             <Route path="dashboard" element={<DoctorDashboard />} />
             <Route path="appointments" element={<DoctorAppointments />} />
             <Route path="consultation/:id" element={<ConsultationPage />} />
@@ -136,27 +146,19 @@ function App() {
           </Route>
 
           {/* Receptionist Routes */}
-          <Route path="/receptionist" element={
-            <ProtectedRoute allowedRoles={['receptionist']}>
-              <DashboardLayout role="receptionist" />
-            </ProtectedRoute>
-          }>
+          <Route path="/receptionist" element={<ProtectedRoute allowedRoles={['receptionist']}><DashboardLayout role="receptionist" /></ProtectedRoute>}>
             <Route path="dashboard" element={<ReceptionistDashboard />} />
             <Route path="pending-appointments" element={<PendingAppointments />} />
             <Route path="queue" element={<TodayQueue />} />
             <Route path="billing" element={<BillingPage />} />
             <Route path="register-patient" element={<RegisterPatient />} />
+            <Route path="schedules" element={<DoctorSchedules />} />
             <Route path="profile" element={<StaffProfile />} />
             <Route path="contact" element={<Contact />} />
-            <Route path="schedules" element={<DoctorSchedules />} />
           </Route>
 
           {/* Lab Routes */}
-          <Route path="/lab" element={
-            <ProtectedRoute allowedRoles={['lab']}>
-              <DashboardLayout role="lab" />
-            </ProtectedRoute>
-          }>
+          <Route path="/lab" element={<ProtectedRoute allowedRoles={['lab']}><DashboardLayout role="lab" /></ProtectedRoute>}>
             <Route path="dashboard" element={<LabDashboard />} />
             <Route path="requests" element={<LabRequests />} />
             <Route path="profile" element={<StaffProfile />} />
@@ -164,11 +166,7 @@ function App() {
           </Route>
 
           {/* Pharmacist Routes */}
-          <Route path="/pharmacist" element={
-            <ProtectedRoute allowedRoles={['pharmacist']}>
-              <DashboardLayout role="pharmacist" />
-            </ProtectedRoute>
-          }>
+          <Route path="/pharmacist" element={<ProtectedRoute allowedRoles={['pharmacist']}><DashboardLayout role="pharmacist" /></ProtectedRoute>}>
             <Route path="dashboard" element={<PharmacistDashboard />} />
             <Route path="prescriptions" element={<Prescriptions />} />
             <Route path="bills" element={<PharmacyBills />} />
@@ -177,11 +175,7 @@ function App() {
           </Route>
 
           {/* Admin Routes */}
-          <Route path="/admin" element={
-            <ProtectedRoute allowedRoles={['admin']}>
-              <DashboardLayout role="admin" />
-            </ProtectedRoute>
-          }>
+          <Route path="/admin" element={<ProtectedRoute allowedRoles={['admin']}><DashboardLayout role="admin" /></ProtectedRoute>}>
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="users" element={<UserManagement />} />
             <Route path="departments" element={<DepartmentManagement />} />

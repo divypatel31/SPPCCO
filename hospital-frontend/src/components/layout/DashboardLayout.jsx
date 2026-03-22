@@ -5,8 +5,9 @@ import {
   LayoutDashboard, Calendar, User, FileText, CreditCard,
   Users, Settings, LogOut, Menu, X, FlaskConical,
   Stethoscope, Activity, Package, TrendingUp, ClipboardList,
-  UserPlus, Clock, Pill, Building2, BarChart3, Bell, Phone, Bot
+  UserPlus, Clock, Pill, Building2, BarChart3, Bell, Phone, Bot, ShieldCheck
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const NAV_ITEMS = {
   patient: [
@@ -29,13 +30,12 @@ const NAV_ITEMS = {
   receptionist: [
     { to: '/receptionist/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/receptionist/pending-appointments', icon: Clock, label: 'Pending Requests' },
-    { to: '/receptionist/queue', icon: Users, label: "Appointment" },
+    { to: '/receptionist/queue', icon: Users, label: "Appointment Queue" },
     { to: '/receptionist/billing', icon: CreditCard, label: 'Billing' },
     { to: '/receptionist/register-patient', icon: UserPlus, label: 'Register Patient' },
     { to: '/receptionist/schedules', icon: Calendar, label: 'Doctor Schedules' },
     { to: '/receptionist/profile', icon: User, label: 'Profile' },
     { to: '/receptionist/contact', icon: Phone, label: 'Contact' },
-
   ],
   lab: [
     { to: '/lab/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -64,21 +64,21 @@ const NAV_ITEMS = {
 };
 
 const ROLE_COLORS = {
-  patient: { bg: 'bg-blue-600', light: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200' },
-  doctor: { bg: 'bg-teal-600', light: 'bg-teal-50', text: 'text-teal-600', border: 'border-teal-200' },
-  receptionist: { bg: 'bg-purple-600', light: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-200' },
-  lab: { bg: 'bg-orange-600', light: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-200' },
-  pharmacist: { bg: 'bg-green-600', light: 'bg-green-50', text: 'text-green-600', border: 'border-green-200' },
-  admin: { bg: 'bg-slate-700', light: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' },
+  patient: { bg: 'bg-blue-600', light: 'bg-blue-50', text: 'text-blue-600', border: 'border-blue-200', active: 'bg-blue-600 text-white shadow-md shadow-blue-500/20' },
+  doctor: { bg: 'bg-teal-600', light: 'bg-teal-50', text: 'text-teal-600', border: 'border-teal-200', active: 'bg-teal-600 text-white shadow-md shadow-teal-500/20' },
+  receptionist: { bg: 'bg-violet-600', light: 'bg-violet-50', text: 'text-violet-600', border: 'border-violet-200', active: 'bg-violet-600 text-white shadow-md shadow-violet-500/20' },
+  lab: { bg: 'bg-amber-500', light: 'bg-amber-50', text: 'text-amber-600', border: 'border-amber-200', active: 'bg-amber-500 text-white shadow-md shadow-amber-500/20' },
+  pharmacist: { bg: 'bg-emerald-600', light: 'bg-emerald-50', text: 'text-emerald-600', border: 'border-emerald-200', active: 'bg-emerald-600 text-white shadow-md shadow-emerald-500/20' },
+  admin: { bg: 'bg-slate-800', light: 'bg-slate-100', text: 'text-slate-800', border: 'border-slate-200', active: 'bg-slate-800 text-white shadow-md shadow-slate-800/20' },
 };
 
 const ROLE_LABELS = {
   patient: 'Patient Portal',
-  doctor: 'Doctor Portal',
-  receptionist: 'Receptionist Portal',
-  lab: 'Lab Technician Portal',
-  pharmacist: 'Pharmacist Portal',
-  admin: 'Admin Portal',
+  doctor: 'Physician Portal',
+  receptionist: 'Front Desk Portal',
+  lab: 'Laboratory Portal',
+  pharmacist: 'Pharmacy Portal',
+  admin: 'System Admin',
 };
 
 export default function DashboardLayout({ role }) {
@@ -95,102 +95,128 @@ export default function DashboardLayout({ role }) {
   };
 
   const Sidebar = () => (
-    <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className={`flex items-center gap-3 px-6 py-5 border-b ${colors.border}`}>
-        <div className={`w-9 h-9 rounded-lg ${colors.bg} flex items-center justify-center`}>
-          <Activity className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <p className="font-bold text-gray-900 text-sm leading-tight">MediCare HMS</p>
-          <p className={`text-xs ${colors.text} font-medium`}>{ROLE_LABELS[role]}</p>
+    <div className="flex flex-col h-full bg-white">
+      
+      {/* --- LOGO AREA --- */}
+      <div className="flex flex-col items-center justify-center p-6 border-b border-slate-100 relative overflow-hidden">
+        <div className={`absolute inset-0 opacity-10 ${colors.bg}`}></div>
+        <img 
+          src="/medicare-favicon.png" 
+          alt="MediCare Logo" 
+          className="h-16 w-auto object-contain relative z-10 transition-transform hover:scale-105 duration-300 drop-shadow-sm rounded-xl mb-2"
+        />
+        <div className="relative z-10 flex items-center gap-1.5 mt-1">
+          <ShieldCheck size={14} className={colors.text} />
+          <p className={`text-[11px] font-bold uppercase tracking-widest ${colors.text}`}>{ROLE_LABELS[role]}</p>
         </div>
       </div>
 
-      {/* User info */}
-      <div className={`mx-4 mt-4 p-3 rounded-xl ${colors.light} border ${colors.border}`}>
-        <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-full ${colors.bg} flex items-center justify-center text-white font-semibold text-sm`}>
+      {/* --- USER PROFILE CARD --- */}
+      <div className="px-5 mt-6">
+        <div className={`p-4 rounded-2xl ${colors.light} border ${colors.border} flex items-center gap-3 shadow-sm`}>
+          <div className={`w-10 h-10 rounded-xl ${colors.bg} flex items-center justify-center text-white font-bold text-sm shadow-inner`}>
             {user?.name?.[0]?.toUpperCase() || 'U'}
           </div>
-          <div className="overflow-hidden">
-            <p className="text-sm font-semibold text-gray-900 truncate">{user?.name || 'User'}</p>
-            <p className="text-xs text-gray-500 truncate">{user?.email || ''}</p>
+          <div className="overflow-hidden flex-1">
+            <p className="text-sm font-bold text-slate-900 truncate tracking-tight">{user?.name || 'User'}</p>
+            <p className="text-[11px] font-medium text-slate-500 truncate">{user?.email || 'Logged In'}</p>
           </div>
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-4 mt-6 space-y-1">
+      {/* --- NAVIGATION LINKS --- */}
+      <nav className="flex-1 px-4 mt-6 space-y-1.5 overflow-y-auto hide-scrollbar pb-6">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
             onClick={() => setSidebarOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${isActive
-                ? `${colors.bg} text-white shadow-sm`
-                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 group ${
+                isActive
+                  ? colors.active
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
               }`
             }
           >
-            <Icon className="w-4.5 h-4.5 flex-shrink-0" size={18} />
-            {label}
+            {({ isActive }) => (
+              <>
+                <Icon 
+                  className={`w-5 h-5 flex-shrink-0 transition-transform duration-200 ${isActive ? 'scale-110' : 'group-hover:scale-110 group-hover:text-slate-700'}`} 
+                  strokeWidth={isActive ? 2.5 : 2} 
+                />
+                {label}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
 
-      {/* Logout */}
-      <div className="px-4 pb-6">
+      {/* --- LOGOUT BUTTON --- */}
+      <div className="p-5 border-t border-slate-100">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 px-3 py-2.5 w-full rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+          className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl text-sm font-semibold text-rose-600 bg-rose-50 hover:bg-rose-600 hover:text-white transition-all border border-rose-100 hover:border-rose-600 hover:shadow-md hover:shadow-rose-500/20"
         >
-          <LogOut size={18} />
-          Logout
+          <LogOut size={18} strokeWidth={2.5} />
+          Secure Logout
         </button>
       </div>
     </div>
   );
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 flex-shrink-0">
+    <div className="flex h-screen bg-slate-50 font-sans selection:bg-slate-800 selection:text-white overflow-hidden">
+      
+      {/* --- DESKTOP SIDEBAR --- */}
+      <aside className="hidden lg:flex flex-col w-[280px] bg-white border-r border-slate-200/60 flex-shrink-0 z-30 shadow-[4px_0_24px_rgba(0,0,0,0.02)]">
         <Sidebar />
       </aside>
 
-      {/* Mobile Sidebar Overlay */}
-      {sidebarOpen && (
-        <div className="md:hidden fixed inset-0 z-40 flex">
-          <div className="fixed inset-0 bg-black/30" onClick={() => setSidebarOpen(false)} />
-          <aside className="relative flex flex-col w-64 bg-white shadow-xl z-50">
-            <button
-              className="absolute top-4 right-4 p-1 rounded-lg hover:bg-gray-100"
-              onClick={() => setSidebarOpen(false)}
+      {/* --- MOBILE SIDEBAR --- */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <div className="lg:hidden fixed inset-0 z-50 flex">
+            <motion.div 
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" 
+              onClick={() => setSidebarOpen(false)} 
+            />
+            <motion.aside 
+              initial={{ x: '-100%' }} animate={{ x: 0 }} exit={{ x: '-100%' }} transition={{ type: "spring", bounce: 0, duration: 0.4 }}
+              className="relative flex flex-col w-[280px] bg-white shadow-2xl z-50"
             >
-              <X size={20} />
-            </button>
-            <Sidebar />
-          </aside>
-        </div>
-      )}
+              <button
+                className="absolute top-4 right-4 p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition-colors z-50"
+                onClick={() => setSidebarOpen(false)}
+              >
+                <X size={20} strokeWidth={2.5} />
+              </button>
+              <Sidebar />
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
 
-      {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Top bar (mobile) */}
-        <header className="md:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-          <button onClick={() => setSidebarOpen(true)} className="p-2 rounded-lg hover:bg-gray-100">
-            <Menu size={20} />
+      {/* --- MAIN CONTENT AREA --- */}
+      <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
+        
+        {/* Mobile Top Header */}
+        <header className="lg:hidden bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-4 py-3 flex items-center justify-between z-20 sticky top-0">
+          <button onClick={() => setSidebarOpen(true)} className="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+            <Menu size={20} strokeWidth={2.5} />
           </button>
-          <span className="font-semibold text-gray-900">MediCare HMS</span>
-          <div className="w-9" />
+          <img src="/medicare-favicon.png" alt="Logo" className="h-8 w-auto object-contain" />
+          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-bold">
+            {user?.name?.[0]?.toUpperCase() || 'U'}
+          </div>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        {/* Scrollable Page Content */}
+        <main className="flex-1 overflow-y-auto relative z-10 scroll-smooth">
           <Outlet />
         </main>
+
       </div>
     </div>
   );
