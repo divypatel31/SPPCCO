@@ -22,7 +22,8 @@ const sendEmail = async (options) => {
       from: `"MediCare HMS" <${process.env.EMAIL_USER}>`,
       to: options.to,
       subject: options.subject,
-      text: options.text
+      text: options.text,
+      html: options.html
     };
 
     // 3. Send the email

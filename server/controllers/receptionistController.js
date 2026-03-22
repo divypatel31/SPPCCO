@@ -1,5 +1,6 @@
 const db = require("../config/db");
 const bcrypt = require("bcryptjs");
+const sendEmail = require('../utils/sendEmail');
 
 /* ==============================
    1️⃣ GET PENDING APPOINTMENTS
@@ -28,7 +29,7 @@ exports.getPendingAppointments = async (req, res) => {
 };
 
 /* ==============================
-   2️⃣ ASSIGN DOCTOR & CUT MONEY
+    2️⃣ ASSIGN DOCTOR & CUT MONEY
 ================================= */
 exports.assignDoctor = async (req, res) => {
   const { appointment_id, doctor_id } = req.body;
@@ -39,16 +40,23 @@ exports.assignDoctor = async (req, res) => {
 
     if (!appointment_id || !doctor_id) throw new Error("Missing required fields");
 
+    // 1. Check Doctor Availability
     const [doctorRows] = await conn.query(
-      "SELECT status FROM users WHERE user_id=? AND role='doctor'",
+      "SELECT status, full_name FROM users WHERE user_id=? AND role='doctor'",
       [doctor_id]
     );
 
     if (doctorRows.length === 0) throw new Error("Doctor not found");
     if (doctorRows[0].status !== 'active') throw new Error("Doctor is absent today");
 
+    const doctorName = doctorRows[0].full_name;
+
+    // 2. Check Appointment and Patient Email
     const [appointmentRows] = await conn.query(
-      "SELECT * FROM appointments WHERE appointment_id=?",
+      `SELECT a.*, u.email as patient_email, u.full_name as patient_name 
+       FROM appointments a 
+       JOIN users u ON a.patient_id = u.user_id 
+       WHERE a.appointment_id=?`,
       [appointment_id]
     );
 
@@ -57,6 +65,7 @@ exports.assignDoctor = async (req, res) => {
     const appointment = appointmentRows[0];
     const patient_id = appointment.patient_id;
 
+    // 3. Wallet Balance Check (FOR UPDATE locks the row)
     const [patientRows] = await conn.query(
       "SELECT wallet_balance FROM users WHERE user_id=? FOR UPDATE",
       [patient_id]
@@ -66,6 +75,7 @@ exports.assignDoctor = async (req, res) => {
       throw new Error("Patient's wallet balance dropped below ₹100. Cannot assign doctor until they top up.");
     }
 
+    // 4. Time Conflict Check
     const [conflict] = await conn.query(
       `SELECT * FROM appointments
        WHERE doctor_id=? 
@@ -77,21 +87,48 @@ exports.assignDoctor = async (req, res) => {
 
     if (conflict.length > 0) throw new Error("Doctor busy at this time. Please select another time slot.");
 
+    // 5. Execute Database Updates
     await conn.query(
-      `UPDATE appointments
-       SET doctor_id=?, status='scheduled'
-       WHERE appointment_id=?`,
+      `UPDATE appointments SET doctor_id=?, status='scheduled' WHERE appointment_id=?`,
       [doctor_id, appointment_id]
     );
 
     await conn.query(
-      `UPDATE users
-       SET wallet_balance = wallet_balance - 100
-       WHERE user_id=?`,
+      `UPDATE users SET wallet_balance = wallet_balance - 100 WHERE user_id=?`,
       [patient_id]
     );
 
     await conn.commit();
+
+    // 🔥 NEW: Trigger Email Notification after successful commit
+    if (appointment.patient_email) {
+      const emailHtml = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+        <h2 style="color: #8b5cf6;">Appointment Confirmed!</h2>
+        <p>Dear <b>${appointment.patient_name}</b>,</p>
+        <p>Your appointment has been successfully scheduled and a doctor has been assigned.</p>
+        
+        <div style="background-color: #f9fafb; padding: 15px; border-radius: 8px; border-left: 4px solid #8b5cf6;">
+          <p style="margin: 5px 0;"><b>Doctor:</b> Dr. ${doctorName}</p>
+          <p style="margin: 5px 0;"><b>Department:</b> ${appointment.department || 'General Medicine'}</p>
+          <p style="margin: 5px 0;"><b>Date:</b> ${new Date(appointment.appointment_date).toDateString()}</p>
+          <p style="margin: 5px 0;"><b>Time Slot:</b> ${appointment.appointment_time.slice(0, 5)}</p>
+          <p style="margin: 5px 0;"><b>Status:</b> Confirmed (₹100 Paid)</p>
+        </div>
+
+        <p style="margin-top: 20px;">Please arrive at the hospital 10 minutes before your time.</p>
+        <p>Best regards,<br><b>MediCare HMS Team</b></p>
+      </div>
+    `;
+
+      // 🔥 CRITICAL: Make sure you pass 'html: emailHtml'
+      await sendEmail({
+        to: appointment.patient_email,
+        subject: `Appointment Confirmed - Dr. ${doctorName}`,
+        html: emailHtml
+      });
+    }
+
     res.json({ message: "Doctor assigned successfully and ₹100 fee deducted." });
 
   } catch (error) {
@@ -235,13 +272,13 @@ exports.generateBill = async (req, res) => {
 
     if (Number(consultation_fee) > 0) {
       await conn.execute(
-        "INSERT INTO bill_items (bill_id, quantity, price, description) VALUES (?, 1, ?, 'Consultation Fee')", 
+        "INSERT INTO bill_items (bill_id, quantity, price, description) VALUES (?, 1, ?, 'Consultation Fee')",
         [bill_id, consultation_fee]
       );
     }
     if (Number(lab_charges) > 0) {
       await conn.execute(
-        "INSERT INTO bill_items (bill_id, quantity, price, description) VALUES (?, 1, ?, 'Laboratory Charges')", 
+        "INSERT INTO bill_items (bill_id, quantity, price, description) VALUES (?, 1, ?, 'Laboratory Charges')",
         [bill_id, lab_charges]
       );
     }
@@ -255,7 +292,7 @@ exports.generateBill = async (req, res) => {
 
     // 🔥 Safety Check: Ensure the update actually changed a row!
     if (updateResult.affectedRows === 0) {
-       throw new Error("Failed to update appointment. ID mismatch.");
+      throw new Error("Failed to update appointment. ID mismatch.");
     }
 
     await conn.commit();
@@ -312,11 +349,11 @@ exports.registerWalkInPatient = async (req, res) => {
     );
 
     // 🔥 Sending clear message so Receptionist can inform patient
-    res.status(201).json({ 
-      message: "Patient registered! Ask them to login using their phone number as the password.", 
-      user_id: result.insertId, 
-      name, 
-      phone 
+    res.status(201).json({
+      message: "Patient registered! Ask them to login using their phone number as the password.",
+      user_id: result.insertId,
+      name,
+      phone
     });
   } catch (error) {
     console.error("REGISTER ERROR:", error);
@@ -363,9 +400,61 @@ exports.cancelAppointmentByReceptionist = async (req, res) => {
     const { appointment_id } = req.body;
     if (!appointment_id) return res.status(400).json({ message: "Appointment ID required" });
 
-    await db.execute(`UPDATE appointments SET status='cancelled', cancelled_by='receptionist' WHERE appointment_id=?`, [appointment_id]);
-    res.json({ message: "Appointment cancelled successfully" });
+    // 1. Fetch details needed for the email before cancelling
+    const [details] = await db.execute(
+      `SELECT a.appointment_date, a.appointment_time, u.email as patient_email, u.full_name as patient_name 
+       FROM appointments a 
+       JOIN users u ON a.patient_id = u.user_id 
+       WHERE a.appointment_id=?`,
+      [appointment_id]
+    );
+
+    if (details.length === 0) {
+      return res.status(404).json({ message: "Appointment details not found" });
+    }
+
+    const appt = details[0];
+
+    // 2. Perform the cancellation update
+    await db.execute(
+      `UPDATE appointments SET status='cancelled', cancelled_by='receptionist' WHERE appointment_id=?`,
+      [appointment_id]
+    );
+
+    // 3. Send Cancellation Email
+    if (appt.patient_email) {
+      const emailHtml = `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #fee2e2; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+          <div style="background-color: #ef4444; padding: 30px 20px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Appointment Cancelled</h1>
+          </div>
+          <div style="padding: 30px; background-color: #ffffff;">
+            <p style="color: #334155; font-size: 16px; margin-top: 0;">Dear <strong>${appt.patient_name}</strong>,</p>
+            <p style="color: #475569; font-size: 15px; line-height: 1.6;">This is an automated notice to inform you that your scheduled appointment has been <b>cancelled</b> by our reception desk.</p>
+            
+            <div style="background-color: #fff1f2; border: 1px solid #fecaca; padding: 20px; border-radius: 12px; margin: 25px 0;">
+              <p style="margin: 0 0 10px 0; color: #991b1b; font-size: 15px;">📅 <strong>Date:</strong> ${new Date(appt.appointment_date).toLocaleDateString('en-IN')}</p>
+              <p style="margin: 0; color: #991b1b; font-size: 15px;">⏰ <strong>Time:</strong> ${appt.appointment_time ? appt.appointment_time.slice(0, 5) : 'N/A'}</p>
+            </div>
+            
+            <p style="color: #475569; font-size: 14px; margin-bottom: 0;">If you would like to reschedule, please log into your patient portal or contact our support team.</p>
+          </div>
+          <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-top: 1px solid #f1f5f9;">
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">MediCare Hospital Management System</p>
+          </div>
+        </div>
+      `;
+
+      await sendEmail({
+        to: appt.patient_email,
+        subject: "Notice: Appointment Cancellation - MediCare HMS",
+        html: emailHtml
+      });
+    }
+
+    res.json({ message: "Appointment cancelled and patient notified." });
   } catch (err) {
+    console.error("CANCEL ERROR:", err);
     res.status(500).json({ message: "Cancel failed" });
   }
 };

@@ -8,12 +8,24 @@ import {
   ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell
 } from 'recharts';
 import { TrendingUp, DollarSign, Activity, CreditCard, Download } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 // 🔥 IMPORTS FOR PDF GENERATION
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#ec4899', '#06b6d4'];
+
+// --- Animation Variants ---
+const FADE_UP_SPRING = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { type: "spring", bounce: 0, duration: 0.8 } }
+};
+
+const STAGGER_CONTAINER = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.05 } }
+};
 
 export default function RevenueAnalytics() {
   const [stats, setStats] = useState(null);
@@ -70,7 +82,7 @@ export default function RevenueAnalytics() {
     { month: 'Feb', consultation_revenue: 28000, lab_revenue: 14000, pharmacy_revenue: 10500 },
   ];
 
-  // 🔥 PDF SPECIFIC CURRENCY FORMATTER (Bypasses the ₹ symbol bug in jsPDF)
+  // 🔥 PDF SPECIFIC CURRENCY FORMATTER
   const formatPDFCurrency = (value) => {
     const num = Number(value) || 0;
     return "Rs. " + num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -119,7 +131,7 @@ export default function RevenueAnalytics() {
         styles: { fontSize: 10, cellPadding: 5 },
         columnStyles: { 
           0: { fontStyle: 'bold', cellWidth: 100, fillColor: [248, 250, 252] }, 
-          1: { halign: 'right' } // Perfectly right-aligns the numbers
+          1: { halign: 'right' }
         }
       });
 
@@ -129,7 +141,6 @@ export default function RevenueAnalytics() {
       doc.setFont("helvetica", "bold");
       doc.text("2. Monthly Revenue Breakdown", 14, currentY);
 
-      // 🔥 FIXED: Explicitly aligning headers to match the data columns
       const monthlyHead = [[
         { content: "Month", styles: { halign: 'left' } },
         { content: "Consultation", styles: { halign: 'right' } },
@@ -153,7 +164,6 @@ export default function RevenueAnalytics() {
         theme: 'striped',
         headStyles: { fillColor: [41, 128, 185] },
         styles: { fontSize: 9 },
-        // Perfectly aligning all the numbers in the body
         columnStyles: { 
           1: { halign: 'right' }, 
           2: { halign: 'right' }, 
@@ -175,7 +185,6 @@ export default function RevenueAnalytics() {
         doc.setFont("helvetica", "bold");
         doc.text("3. Doctor Performance Summary", 14, currentY);
 
-        // 🔥 FIXED: Centered headers for the number columns
         const docHead = [[
           { content: "Doctor Name", styles: { halign: 'left' } },
           { content: "Department", styles: { halign: 'left' } },
@@ -208,7 +217,6 @@ export default function RevenueAnalytics() {
       doc.setTextColor(150, 150, 150);
       doc.text("CONFIDENTIAL - MediCare HMS Internal Financial Report", 105, finalY > 280 ? 280 : finalY, { align: "center" });
 
-      // Save the PDF
       doc.save(`Revenue_Report_${dateStr.replace(/\//g, '-')}.pdf`);
       toast.success("Financial Report Downloaded Successfully!");
     } catch (err) {
@@ -220,32 +228,34 @@ export default function RevenueAnalytics() {
   if (loading) return <Spinner />;
 
   return (
-    <div>
+    <motion.div initial="hidden" animate="visible" variants={STAGGER_CONTAINER} className="p-4 sm:p-8 max-w-[1600px] mx-auto font-sans">
       <PageHeader 
         title="Revenue Analytics" 
         subtitle="Complete financial overview of the hospital" 
         action={
-          <button 
+          <motion.button 
+            whileHover={{ y: -2 }} whileTap={{ scale: 0.98 }}
             onClick={generatePDFReport}
-            className="btn-primary flex items-center gap-2"
+            className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.15)] hover:bg-slate-800 transition-colors"
           >
             <Download size={16} />
             Download Report
-          </button>
+          </motion.button>
         }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard icon={DollarSign} label="Total Revenue" value={formatCurrency(totalRevenue)} color="green" />
-        <StatCard icon={Activity} label="Consultation" value={formatCurrency(stats?.consultation_revenue)} color="blue" />
-        <StatCard icon={CreditCard} label="Lab Revenue" value={formatCurrency(stats?.lab_revenue)} color="orange" />
-        <StatCard icon={TrendingUp} label="Pharmacy Revenue" value={formatCurrency(stats?.pharmacy_revenue)} color="purple" />
-      </div>
+      {/* KPI Cards */}
+      <motion.div variants={STAGGER_CONTAINER} className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <motion.div variants={FADE_UP_SPRING}><StatCard icon={DollarSign} label="Total Revenue" value={formatCurrency(totalRevenue)} color="green" /></motion.div>
+        <motion.div variants={FADE_UP_SPRING}><StatCard icon={Activity} label="Consultation" value={formatCurrency(stats?.consultation_revenue)} color="blue" /></motion.div>
+        <motion.div variants={FADE_UP_SPRING}><StatCard icon={CreditCard} label="Lab Revenue" value={formatCurrency(stats?.lab_revenue)} color="orange" /></motion.div>
+        <motion.div variants={FADE_UP_SPRING}><StatCard icon={TrendingUp} label="Pharmacy Revenue" value={formatCurrency(stats?.pharmacy_revenue)} color="purple" /></motion.div>
+      </motion.div>
 
       <div className="grid lg:grid-cols-3 gap-6 mb-6">
         {/* Pie Chart: Main Breakdown */}
-        <div className="card">
-          <h2 className="font-semibold text-gray-900 mb-4">Revenue Distribution</h2>
+        <motion.div variants={FADE_UP_SPRING} className="bg-white rounded-2xl p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] border border-slate-200/60">
+          <h2 className="font-semibold text-slate-900 mb-4">Revenue Distribution</h2>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart margin={{ top: 10, right: 35, bottom: 10, left: 35 }}>
               <Pie 
@@ -270,76 +280,76 @@ export default function RevenueAnalytics() {
               <div key={item.name} className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2">
                   <div className="w-3 h-3 rounded-full" style={{ background: COLORS[i] }} />
-                  <span className="text-gray-700">{item.name}</span>
+                  <span className="text-slate-700 font-medium">{item.name}</span>
                 </div>
                 <div className="text-right">
-                  <span className="font-semibold">{formatCurrency(item.value)}</span>
-                  <span className="text-gray-400 text-xs ml-2">
+                  <span className="font-semibold text-slate-900">{formatCurrency(item.value)}</span>
+                  <span className="text-slate-400 text-xs ml-2 font-medium">
                     {totalRevenue > 0 ? `${((item.value / totalRevenue) * 100).toFixed(1)}%` : '0%'}
                   </span>
                 </div>
               </div>
             ))}
           </div>
-        </div>
+        </motion.div>
 
         {/* Revenue Summary Cards */}
-        <div className="lg:col-span-2 card">
-          <h2 className="font-semibold text-gray-900 mb-4">Financial Summary</h2>
+        <motion.div variants={FADE_UP_SPRING} className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] border border-slate-200/60">
+          <h2 className="font-semibold text-slate-900 mb-4">Financial Summary</h2>
           <div className="grid grid-cols-2 gap-4">
             {[
-              { label: 'Today\'s Revenue', value: stats?.today_revenue, color: 'bg-blue-50 border-blue-100' },
-              { label: 'This Month', value: stats?.monthly_revenue, color: 'bg-green-50 border-green-100' },
-              { label: 'Paid Bills', value: stats?.paid_bills_count, isCurrency: false, color: 'bg-purple-50 border-purple-100' },
-              { label: 'Pending Bills', value: stats?.pending_bills, isCurrency: false, color: 'bg-orange-50 border-orange-100' },
+              { label: 'Today\'s Revenue', value: stats?.today_revenue, color: 'bg-blue-50/50 border-blue-100/60 text-blue-900' },
+              { label: 'This Month', value: stats?.monthly_revenue, color: 'bg-emerald-50/50 border-emerald-100/60 text-emerald-900' },
+              { label: 'Paid Bills', value: stats?.paid_bills_count, isCurrency: false, color: 'bg-purple-50/50 border-purple-100/60 text-purple-900' },
+              { label: 'Pending Bills', value: stats?.pending_bills, isCurrency: false, color: 'bg-orange-50/50 border-orange-100/60 text-orange-900' },
             ].map(({ label, value, isCurrency = true, color }) => (
-              <div key={label} className={`p-4 rounded-xl border ${color}`}>
-                <p className="text-xs text-gray-500 mb-1">{label}</p>
-                <p className="text-xl font-bold text-gray-900">{value !== undefined ? (isCurrency ? formatCurrency(value) : value) : '—'}</p>
+              <div key={label} className={`p-4 rounded-xl border ${color} transition-colors hover:shadow-sm`}>
+                <p className="text-xs font-medium text-slate-500 mb-1">{label}</p>
+                <p className="text-xl font-bold tracking-tight">{value !== undefined ? (isCurrency ? formatCurrency(value) : value) : '—'}</p>
               </div>
             ))}
           </div>
-          <div className="mt-4 p-3 bg-gray-50 rounded-xl">
-            <p className="text-xs text-gray-500">Revenue is calculated dynamically from paid bills only. Pending or cancelled bills are excluded.</p>
+          <div className="mt-4 p-3 bg-slate-50/50 border border-slate-100 rounded-xl">
+            <p className="text-xs font-medium text-slate-500">Revenue is calculated dynamically from paid bills only. Pending or cancelled bills are excluded.</p>
           </div>
-        </div>
+        </motion.div>
       </div>
 
       {/* Monthly Bar Chart */}
-      <div className="card mb-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Monthly Revenue Trend</h2>
+      <motion.div variants={FADE_UP_SPRING} className="bg-white rounded-2xl p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] border border-slate-200/60 mb-6">
+        <h2 className="font-semibold text-slate-900 mb-4">Monthly Revenue Trend</h2>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={chartData} margin={{ top: 10, right: 20, bottom: 5, left: 20 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+            <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
+            <YAxis tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
             <Tooltip formatter={v => formatCurrency(v)} />
-            <Legend />
+            <Legend wrapperStyle={{ paddingTop: '20px' }} />
             <Bar dataKey="consultation_revenue" name="Consultation" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             <Bar dataKey="lab_revenue" name="Lab" fill="#10b981" radius={[4, 4, 0, 0]} />
             <Bar dataKey="pharmacy_revenue" name="Pharmacy" fill="#f59e0b" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
-      </div>
+      </motion.div>
 
       {/* Line Chart */}
-      <div className="card mb-6">
-        <h2 className="font-semibold text-gray-900 mb-4">Revenue Growth Trend</h2>
+      <motion.div variants={FADE_UP_SPRING} className="bg-white rounded-2xl p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] border border-slate-200/60 mb-6">
+        <h2 className="font-semibold text-slate-900 mb-4">Revenue Growth Trend</h2>
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={chartData.map(d => ({ ...d, total: (d.consultation_revenue || 0) + (d.lab_revenue || 0) + (d.pharmacy_revenue || 0) }))}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-            <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+            <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
+            <YAxis tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
             <Tooltip formatter={v => formatCurrency(v)} />
             <Line type="monotone" dataKey="total" name="Total Revenue" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
           </LineChart>
         </ResponsiveContainer>
-      </div>
+      </motion.div>
 
       <div className="grid lg:grid-cols-2 gap-6 mt-6">
         {/* Department-wise Revenue Pie Chart */}
-        <div className="card">
-          <h2 className="font-semibold mb-4">Department-wise Revenue</h2>
+        <motion.div variants={FADE_UP_SPRING} className="bg-white rounded-2xl p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] border border-slate-200/60">
+          <h2 className="font-semibold text-slate-900 mb-4">Department-wise Revenue</h2>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart margin={{ top: 20, right: 50, bottom: 20, left: 50 }}>
               <Pie
@@ -350,7 +360,7 @@ export default function RevenueAnalytics() {
                 cy="50%"
                 outerRadius={65} 
                 labelLine={true}
-                style={{ fontSize: '11px', fontWeight: '600' }}
+                style={{ fontSize: '11px', fontWeight: '500' }}
                 label={({ department, name, percent }) => `${department || name} ${(percent * 100).toFixed(0)}%`}
               >
                 {departmentRevenue.map((_, index) => (
@@ -360,67 +370,67 @@ export default function RevenueAnalytics() {
               <Tooltip formatter={(v) => formatCurrency(v)} />
             </PieChart>
           </ResponsiveContainer>
-        </div>
+        </motion.div>
 
         {/* Patient Registration Trend */}
-        <div className="card">
-          <h2 className="font-semibold mb-4">Patient Registrations Trend</h2>
+        <motion.div variants={FADE_UP_SPRING} className="bg-white rounded-2xl p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] border border-slate-200/60">
+          <h2 className="font-semibold text-slate-900 mb-4">Patient Registrations Trend</h2>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={patientTrend} margin={{ top: 20, right: 20, bottom: 5, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
+              <YAxis tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
               <Tooltip />
-              <Line
-                type="monotone"
-                dataKey="total_patients"
-                stroke="#3b82f6"
-                strokeWidth={2}
-                dot={{ r: 4 }}
-              />
+              <Line type="monotone" dataKey="total_patients" name="New Patients" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
-        </div>
+        </motion.div>
       </div>
 
       {/* Doctor Performance Table */}
-      <div className="card mt-6 overflow-x-auto">
-        <h2 className="font-semibold text-gray-900 mb-6">Doctor Performance</h2>
+      <motion.div variants={FADE_UP_SPRING} className="bg-white rounded-2xl shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] border border-slate-200/60 mt-6 overflow-hidden">
+        <div className="p-6 border-b border-slate-100">
+          <h2 className="font-semibold text-slate-900">Doctor Performance</h2>
+        </div>
         
         {doctorPerformance.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-6">No doctor performance data available yet.</p>
+          <p className="text-sm text-slate-500 font-medium text-center py-8">No doctor performance data available yet.</p>
         ) : (
-          <table className="w-full text-left border-collapse min-w-[600px]">
-            <thead>
-              <tr className="border-b border-gray-200 text-sm text-gray-500">
-                <th className="pb-3 font-medium px-4">Doctor</th>
-                <th className="pb-3 font-medium px-4">Department</th>
-                <th className="pb-3 font-medium px-4">Consultations</th>
-                <th className="pb-3 font-medium px-4">Avg/Day</th>
-              </tr>
-            </thead>
-            <tbody>
-              {doctorPerformance.map((doc, idx) => (
-                <tr key={idx} className="border-b border-gray-100 last:border-0 hover:bg-gray-50/50 transition-colors">
-                  <td className="py-4 px-4 text-sm font-semibold text-gray-900">
-                    {doc.doctor_name || doc.name || 'Unknown Doctor'}
-                  </td>
-                  <td className="py-4 px-4 text-sm text-gray-600">
-                    {doc.department || 'General'}
-                  </td>
-                  <td className="py-4 px-4 text-sm text-gray-900">
-                    {doc.consultations || 0}
-                  </td>
-                  <td className="py-4 px-4 text-sm text-gray-600">
-                    {doc.avg_per_day || (doc.consultations ? (doc.consultations / 30).toFixed(1) : '0.0')}
-                  </td>
+          <div className="overflow-x-auto hide-scrollbar">
+            <table className="w-full text-left border-collapse min-w-[600px]">
+              <thead>
+                <tr className="bg-slate-50/50 border-b border-slate-200/60 text-[11px] uppercase tracking-widest text-slate-500 font-medium">
+                  <th className="p-4 pl-6">Doctor</th>
+                  <th className="p-4">Department</th>
+                  <th className="p-4">Consultations</th>
+                  <th className="p-4 pr-6">Avg/Day</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {doctorPerformance.map((doc, idx) => (
+                  <tr key={idx} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50 transition-colors">
+                    <td className="p-4 pl-6 text-sm font-medium text-slate-900">
+                      {doc.doctor_name || doc.name || 'Unknown Doctor'}
+                    </td>
+                    <td className="p-4">
+                      <span className="text-[11px] font-medium text-slate-600 bg-slate-100 border border-slate-200/60 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                        {doc.department || 'General'}
+                      </span>
+                    </td>
+                    <td className="p-4 text-sm font-semibold text-slate-900">
+                      {doc.consultations || 0}
+                    </td>
+                    <td className="p-4 pr-6 text-sm font-medium text-slate-500">
+                      {doc.avg_per_day || (doc.consultations ? (doc.consultations / 30).toFixed(1) : '0.0')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
+      </motion.div>
 
-    </div>
+    </motion.div>
   );
 }

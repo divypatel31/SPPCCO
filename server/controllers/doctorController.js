@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const sendEmail = require('../utils/sendEmail');
 
 /* 1️⃣ GET DOCTOR APPOINTMENTS */
 exports.getMyAppointments = async (req, res) => {
@@ -384,10 +385,13 @@ exports.cancelAppointment = async (req, res) => {
     const doctor_id = req.user.id;
     const appointment_id = req.params.id;
 
+    // 1. Fetch status AND patient details needed for the email
     const [rows] = await db.execute(
-      `SELECT status 
-       FROM appointments 
-       WHERE appointment_id=? AND doctor_id=?`,
+      `SELECT a.status, a.appointment_date, a.appointment_time, 
+              u.email AS patient_email, u.full_name AS patient_name 
+       FROM appointments a
+       JOIN users u ON a.patient_id = u.user_id
+       WHERE a.appointment_id=? AND a.doctor_id=?`,
       [appointment_id, doctor_id]
     );
 
@@ -395,12 +399,16 @@ exports.cancelAppointment = async (req, res) => {
       return res.status(404).json({ message: "Appointment not found" });
     }
 
-    if (rows[0].status !== "scheduled") {
+    const appt = rows[0];
+
+    // 2. Validation: Only scheduled appointments can be cancelled by doctor
+    if (appt.status !== "scheduled") {
       return res.status(400).json({
         message: "Cannot cancel after patient arrived or consultation started"
       });
     }
 
+    // 3. Perform database update
     await db.execute(
       `UPDATE appointments 
        SET status='cancelled', cancelled_by='doctor'
@@ -408,9 +416,41 @@ exports.cancelAppointment = async (req, res) => {
       [appointment_id]
     );
 
-    res.json({ message: "Appointment cancelled successfully" });
+    // 4. Send Cancellation Email to Patient
+    if (appt.patient_email) {
+      const emailHtml = `
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #fee2e2; border-radius: 16px; overflow: hidden;">
+          <div style="background-color: #ef4444; padding: 30px 20px; text-align: center;">
+            <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 600;">Appointment Cancelled</h1>
+          </div>
+          <div style="padding: 30px; background-color: #ffffff;">
+            <p style="color: #334155; font-size: 16px; margin-top: 0;">Dear <strong>${appt.patient_name}</strong>,</p>
+            <p style="color: #475569; font-size: 15px; line-height: 1.6;">We regret to inform you that your upcoming appointment has been <b>cancelled by the doctor</b> due to unforeseen clinical circumstances.</p>
+            
+            <div style="background-color: #fff1f2; border: 1px solid #fecaca; padding: 20px; border-radius: 12px; margin: 25px 0;">
+              <p style="margin: 0 0 10px 0; color: #991b1b; font-size: 15px;">📅 <strong>Original Date:</strong> ${new Date(appt.appointment_date).toLocaleDateString('en-IN')}</p>
+              <p style="margin: 0; color: #991b1b; font-size: 15px;">⏰ <strong>Original Time:</strong> ${appt.appointment_time ? appt.appointment_time.slice(0, 5) : 'N/A'}</p>
+            </div>
+            
+            <p style="color: #475569; font-size: 14px; margin-bottom: 0;">Please log into your patient portal to book a new slot or contact the hospital reception for assistance.</p>
+          </div>
+          <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-top: 1px solid #f1f5f9;">
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">MediCare Hospital Management System</p>
+          </div>
+        </div>
+      `;
+
+      await sendEmail({
+        to: appt.patient_email,
+        subject: "Urgent: Appointment Cancellation - MediCare HMS",
+        html: emailHtml
+      });
+    }
+
+    res.json({ message: "Appointment cancelled and patient notified via email." });
 
   } catch (err) {
+    console.error("DOCTOR CANCEL ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 };
