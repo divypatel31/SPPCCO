@@ -3,11 +3,22 @@ import { StatCard, Spinner, EmptyState } from '../../components/common';
 import { formatCurrency } from '../../utils/helpers';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, Users, CreditCard, Activity, Building2, Pill } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { TrendingUp, Users, CreditCard, Activity, Building2, Pill, ShieldCheck, ChevronRight, FlaskConical, Settings } from 'lucide-react';
+import { useLocation, Link } from 'react-router-dom';
+// 🔥 FIX: Added AnimatePresence here
+import { motion, AnimatePresence } from 'framer-motion';
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
+// --- Animations ---
+const FADE_UP = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { type: "spring", bounce: 0, duration: 0.6 } }
+};
+
+const STAGGER = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
+};
 
 export default function AdminDashboard() {
   const location = useLocation();
@@ -30,119 +41,190 @@ export default function AdminDashboard() {
     fetchData();
   }, [location.pathname]);
 
-  if (loading) return <Spinner />;
+  if (loading) return (
+    <div className="min-h-screen p-8 flex items-center justify-center">
+      <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin" />
+    </div>
+  );
 
   const revenueBreakdown = [
-    { name: 'Consultation', value: stats?.consultation_revenue || 0, color: '#3b82f6' },
-    { name: 'Lab', value: stats?.lab_revenue || 0, color: '#10b981' },
-    { name: 'Pharmacy', value: stats?.pharmacy_revenue || 0, color: '#f59e0b' },
+    { name: 'Consultation', value: stats?.consultation_revenue || 0, color: '#3b82f6' }, // Blue
+    { name: 'Lab Diagnostics', value: stats?.lab_revenue || 0, color: '#10b981' }, // Emerald
+    { name: 'Pharmacy Sales', value: stats?.pharmacy_revenue || 0, color: '#f59e0b' }, // Amber
   ];
 
   return (
-    <div>
-      <div className="bg-gradient-to-r from-slate-700 to-slate-800 rounded-2xl p-6 mb-6 text-white">
-        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-        <p className="text-slate-300 mt-1">System overview and hospital analytics</p>
-      </div>
+    <motion.div initial="hidden" animate="visible" variants={STAGGER} className="max-w-[1400px] mx-auto p-4 sm:p-6 font-sans pb-24">
+      
+      {/* --- PREMIUM HEADER --- */}
+      <motion.div variants={FADE_UP} className="relative overflow-hidden bg-slate-900 rounded-[24px] p-8 mb-8 text-white shadow-xl shadow-slate-900/10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+        {/* Abstract Background Blurs */}
+        <div className="absolute -top-24 -right-24 w-64 h-64 bg-blue-500/20 rounded-full filter blur-3xl" />
+        <div className="absolute bottom-0 left-32 w-48 h-48 bg-emerald-500/20 rounded-full filter blur-2xl" />
+        
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 mb-2">
+            <ShieldCheck size={20} className="text-emerald-400" />
+            <p className="text-slate-400 font-bold text-[11px] tracking-[0.2em] uppercase">System Administrator</p>
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-black tracking-tight mb-2">
+            Command Center
+          </h1>
+          <p className="text-slate-400 font-medium text-sm max-w-md leading-relaxed">
+            Real-time hospital analytics, revenue tracking, and global system metrics.
+          </p>
+        </div>
+      </motion.div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard icon={Users} label="Total Patients" value={stats?.total_patients || '—'} color="blue" />
-        <StatCard icon={Activity} label="Total Appointments" value={stats?.total_appointments || '—'} color="teal" />
-        <StatCard icon={TrendingUp} label="Total Revenue" value={formatCurrency(stats?.total_revenue)} color="green" />
-        <StatCard icon={CreditCard} label="Pending Bills" value={stats?.pending_bills || '—'} color="orange" />
-      </div>
+      {/* --- STATS GRID --- */}
+      <motion.div variants={STAGGER} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        <motion.div variants={FADE_UP}><StatCard icon={Users} label="Total Patients" value={stats?.total_patients || '0'} color="blue" /></motion.div>
+        <motion.div variants={FADE_UP}><StatCard icon={Activity} label="Total Appointments" value={stats?.total_appointments || '0'} color="teal" /></motion.div>
+        <motion.div variants={FADE_UP}><StatCard icon={TrendingUp} label="Total Revenue" value={formatCurrency(stats?.total_revenue || 0)} color="green" /></motion.div>
+        <motion.div variants={FADE_UP}><StatCard icon={CreditCard} label="Pending Bills" value={stats?.pending_bills || '0'} color="orange" /></motion.div>
+      </motion.div>
 
-      <div className="grid lg:grid-cols-3 gap-6 mb-6">
-        {/* Revenue breakdown cards */}
-        <div className="card">
-          <h2 className="font-semibold text-gray-900 mb-4">Revenue Breakdown</h2>
-          <div className="space-y-3">
+      <div className="grid lg:grid-cols-3 gap-6 mb-8">
+        
+        {/* --- REVENUE BREAKDOWN --- */}
+        <motion.div variants={FADE_UP} className="bg-white rounded-[24px] p-6 sm:p-8 border border-slate-200/60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] flex flex-col">
+          <h2 className="text-base font-bold text-slate-900 tracking-tight mb-6 flex items-center gap-2">
+            <TrendingUp size={18} className="text-slate-400" /> Revenue Distribution
+          </h2>
+          
+          <div className="space-y-4 flex-1">
             {revenueBreakdown.map(item => (
-              <div key={item.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                  <span className="text-sm text-gray-700">{item.name}</span>
+              <div key={item.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: item.color }} />
+                  <span className="text-sm font-semibold text-slate-700">{item.name}</span>
                 </div>
-                <span className="text-sm font-semibold">{formatCurrency(item.value)}</span>
+                <span className="text-sm font-bold text-slate-900">{formatCurrency(item.value)}</span>
               </div>
             ))}
-            <div className="pt-2 border-t border-gray-100 flex justify-between font-bold">
-              <span>Total</span>
-              <span>{formatCurrency(revenueBreakdown.reduce((s, i) => s + i.value, 0))}</span>
+            <div className="pt-4 mt-2 border-t border-slate-100 flex justify-between items-center px-1">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Gross Total</span>
+              <span className="text-lg font-black text-emerald-600">{formatCurrency(revenueBreakdown.reduce((s, i) => s + i.value, 0))}</span>
             </div>
           </div>
-          {revenueBreakdown.some(r => r.value > 0) && (
-            <ResponsiveContainer width="100%" height={120} className="mt-4">
-              <PieChart>
-                <Pie data={revenueBreakdown} cx="50%" cy="50%" innerRadius={30} outerRadius={55} paddingAngle={3} dataKey="value">
-                  {revenueBreakdown.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                </Pie>
-                <Tooltip formatter={(v) => formatCurrency(v)} />
-              </PieChart>
-            </ResponsiveContainer>
-          )}
-        </div>
 
-        {/* User breakdown */}
-        <div className="card">
-          <h2 className="font-semibold text-gray-900 mb-4">Staff Overview</h2>
-          <div className="space-y-3">
+          {revenueBreakdown.some(r => r.value > 0) && (
+            <div className="mt-6 pt-6 border-t border-slate-100">
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie data={revenueBreakdown} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={5} dataKey="value" stroke="none">
+                    {revenueBreakdown.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                  </Pie>
+                  <Tooltip 
+                    formatter={(v) => formatCurrency(v)} 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </motion.div>
+
+        {/* --- STAFF OVERVIEW --- */}
+        <motion.div variants={FADE_UP} className="bg-white rounded-[24px] p-6 sm:p-8 border border-slate-200/60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)]">
+          <h2 className="text-base font-bold text-slate-900 tracking-tight mb-6 flex items-center gap-2">
+            <Users size={18} className="text-slate-400" /> Active Personnel
+          </h2>
+          <div className="space-y-4">
             {[
-              { label: 'Doctors', value: stats?.total_doctors, icon: Activity, color: 'text-teal-600 bg-teal-50' },
-              { label: 'Receptionists', value: stats?.total_receptionists, icon: Users, color: 'text-purple-600 bg-purple-50' },
-              { label: 'Lab Technicians', value: stats?.total_lab_techs, icon: Building2, color: 'text-orange-600 bg-orange-50' },
-              { label: 'Pharmacists', value: stats?.total_pharmacists, icon: Pill, color: 'text-green-600 bg-green-50' },
+              { label: 'Physicians', value: stats?.total_doctors, icon: Activity, color: 'text-teal-600 bg-teal-50 border-teal-100' },
+              { label: 'Front Desk', value: stats?.total_receptionists, icon: Users, color: 'text-violet-600 bg-violet-50 border-violet-100' },
+              { label: 'Lab Technicians', value: stats?.total_lab_techs, icon: FlaskConical, color: 'text-amber-600 bg-amber-50 border-amber-100' },
+              { label: 'Pharmacists', value: stats?.total_pharmacists, icon: Pill, color: 'text-emerald-600 bg-emerald-50 border-emerald-100' },
             ].map(({ label, value, icon: Icon, color }) => (
-              <div key={label} className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${color}`}>
-                  <Icon size={16} />
+              <div key={label} className="flex items-center gap-4 p-3 hover:bg-slate-50 rounded-xl transition-colors group">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shadow-sm group-hover:scale-105 transition-transform ${color}`}>
+                  <Icon size={20} />
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm text-gray-700">{label}</p>
+                  <p className="text-sm font-bold text-slate-800">{label}</p>
                 </div>
-                <span className="text-sm font-semibold text-gray-900">{value ?? '—'}</span>
+                <div className="bg-slate-100 px-3 py-1 rounded-lg border border-slate-200">
+                  <span className="text-sm font-black text-slate-900">{value ?? '0'}</span>
+                </div>
               </div>
             ))}
           </div>
-        </div>
+        </motion.div>
 
-        {/* Quick actions */}
-        <div className="card">
-          <h2 className="font-semibold text-gray-900 mb-4">Quick Actions</h2>
-          <div className="space-y-2">
+        {/* --- QUICK ACTIONS --- */}
+        <motion.div variants={FADE_UP} className="bg-white rounded-[24px] p-6 sm:p-8 border border-slate-200/60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)]">
+          <h2 className="text-base font-bold text-slate-900 tracking-tight mb-6 flex items-center gap-2">
+            <Settings size={18} className="text-slate-400" /> Administrative Shortcuts
+          </h2>
+          <div className="space-y-3">
             {[
-              { to: '/admin/users', label: '👥 Manage Users', desc: 'Create & manage staff accounts' },
-              { to: '/admin/departments', label: '🏥 Departments', desc: 'Manage hospital departments' },
-              { to: '/admin/medicines', label: '💊 Medicines', desc: 'Medicine master & inventory' },
-              { to: '/admin/revenue', label: '📊 Revenue Report', desc: 'Detailed financial analytics' },
+              { to: '/admin/users', label: 'User Directory', desc: 'Create & manage staff accounts', icon: '👥' },
+              { to: '/admin/departments', label: 'Departments', desc: 'Manage hospital sectors', icon: '🏥' },
+              { to: '/admin/medicines', label: 'Pharmacy Inventory', desc: 'Medicine master database', icon: '💊' },
+              { to: '/admin/revenue', label: 'Financial Analytics', desc: 'Detailed revenue tracking', icon: '📊' },
             ].map(item => (
-              <a key={item.to} href={item.to} className="block p-3 rounded-xl hover:bg-gray-50 transition-colors border border-gray-100">
-                <p className="text-sm font-medium text-gray-900">{item.label}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{item.desc}</p>
-              </a>
+              <Link 
+                key={item.to} 
+                to={item.to} 
+                className="flex items-center gap-4 p-4 rounded-xl border border-slate-200/60 bg-white hover:bg-slate-50 hover:border-slate-300 hover:shadow-sm transition-all group"
+              >
+                <div className="text-2xl opacity-80 group-hover:scale-110 group-hover:opacity-100 transition-all">{item.icon}</div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-slate-900">{item.label}</p>
+                  <p className="text-[11px] font-medium text-slate-500 mt-0.5">{item.desc}</p>
+                </div>
+                <ChevronRight size={16} className="text-slate-300 group-hover:text-slate-600 transition-colors" />
+              </Link>
             ))}
           </div>
-        </div>
+        </motion.div>
       </div>
 
-      {/* Monthly Revenue Chart */}
-      {revenue.length > 0 && (
-        <div className="card">
-          <h2 className="font-semibold text-gray-900 mb-4">Monthly Revenue Trend</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={revenue}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="month" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v) => formatCurrency(v)} />
-              <Bar dataKey="consultation_revenue" name="Consultation" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="lab_revenue" name="Lab" fill="#10b981" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="pharmacy_revenue" name="Pharmacy" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </div>
+      {/* --- MONTHLY REVENUE CHART --- */}
+      <AnimatePresence>
+        {revenue.length > 0 && (
+          <motion.div variants={FADE_UP} className="bg-white rounded-[24px] p-6 sm:p-8 border border-slate-200/60 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)]">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 tracking-tight">Fiscal Trajectory</h2>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mt-1">Monthly Revenue Breakdown</p>
+              </div>
+            </div>
+            
+            <div className="h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={revenue} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis 
+                    dataKey="month" 
+                    tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} 
+                    axisLine={false} 
+                    tickLine={false} 
+                    dy={10}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }} 
+                    tickFormatter={(v) => `₹${(v/1000).toFixed(0)}k`} 
+                    axisLine={false} 
+                    tickLine={false} 
+                  />
+                  <Tooltip 
+                    formatter={(v) => formatCurrency(v)} 
+                    cursor={{ fill: '#f8fafc' }}
+                    contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', fontWeight: 'bold', fontSize: '12px' }}
+                  />
+                  <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '12px', fontWeight: 'bold' }} />
+                  <Bar dataKey="consultation_revenue" name="Consultation" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="lab_revenue" name="Lab" fill="#10b981" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="pharmacy_revenue" name="Pharmacy" fill="#f59e0b" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+    </motion.div>
   );
 }

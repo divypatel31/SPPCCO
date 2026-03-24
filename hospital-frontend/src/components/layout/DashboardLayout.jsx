@@ -97,14 +97,17 @@ export default function DashboardLayout({ role }) {
   const Sidebar = () => (
     <div className="flex flex-col h-full bg-white">
       
-      {/* --- LOGO AREA --- */}
+      {/* --- LOGO AREA (Text & Icon Version) --- */}
       <div className="flex flex-col items-center justify-center p-6 border-b border-slate-100 relative overflow-hidden">
         <div className={`absolute inset-0 opacity-10 ${colors.bg}`}></div>
-        <img 
-          src="/medicare-favicon.png" 
-          alt="MediCare Logo" 
-          className="h-16 w-auto object-contain relative z-10 transition-transform hover:scale-105 duration-300 drop-shadow-sm rounded-xl mb-2"
-        />
+        
+        <div className="relative z-10 flex items-center gap-2 mb-2">
+          <div className={`w-10 h-10 rounded-xl ${colors.bg} flex items-center justify-center text-white shadow-md`}>
+            <Activity size={24} strokeWidth={2.5} />
+          </div>
+          <span className="text-2xl font-black tracking-tight text-slate-900">MediCare<span className={colors.text}>.</span></span>
+        </div>
+
         <div className="relative z-10 flex items-center gap-1.5 mt-1">
           <ShieldCheck size={14} className={colors.text} />
           <p className={`text-[11px] font-bold uppercase tracking-widest ${colors.text}`}>{ROLE_LABELS[role]}</p>
@@ -206,7 +209,13 @@ export default function DashboardLayout({ role }) {
           <button onClick={() => setSidebarOpen(true)} className="p-2.5 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
             <Menu size={20} strokeWidth={2.5} />
           </button>
-          <img src="/medicare-favicon.png" alt="Logo" className="h-8 w-auto object-contain" />
+          
+          {/* Mobile Text Logo */}
+          <div className="flex items-center gap-2">
+            <Activity className="text-slate-800" size={20} strokeWidth={2.5} />
+            <span className="text-lg font-black tracking-tight text-slate-900">MediCare</span>
+          </div>
+          
           <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-600 font-bold">
             {user?.name?.[0]?.toUpperCase() || 'U'}
           </div>

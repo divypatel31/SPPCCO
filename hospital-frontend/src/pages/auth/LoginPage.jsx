@@ -45,8 +45,6 @@ export default function LoginPage() {
         password: form.password 
       }); 
 
-      // 🔥 THE NEW FIX: If backend says "200 OK" but didn't give us a token or a password reset flag...
-      // It means it was actually an error! We manually throw it to the catch block.
       if (!res.data.token && !res.data.requirePasswordChange) {
         throw { 
           response: { 
@@ -55,7 +53,6 @@ export default function LoginPage() {
         };
       }
 
-      // If they need to change their first-time password
       if (res.data?.requirePasswordChange) {
         toast('Security alert: Please set a secure password.', { icon: '🔒' });
         setUserId(res.data.user_id);
@@ -64,15 +61,13 @@ export default function LoginPage() {
         return;
       }
 
-      // If everything is perfect, log them in!
       login(res.data);
       toast.success('Access Verified');
-      navigate('/', { replace: true });
+      navigate('/dashboard', { replace: true });
 
     } catch (err) {
       console.error("Login Error:", err);
       
-      // 🔥 BULLETPROOF ERROR CHECKING 🔥
       if (err.response) {
         const backendMessage = err.response.data?.message;
         toast.error(backendMessage || "Invalid Email or Password.");
@@ -167,7 +162,6 @@ export default function LoginPage() {
     }
   };
 
-  // Timer Countdown Logic
   useEffect(() => {
     let interval;
     if (timer > 0) {
@@ -187,25 +181,20 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex bg-[#F1F5F9] font-sans overflow-hidden relative">
+    <div className="min-h-screen flex bg-slate-900 font-sans overflow-hidden relative">
       
-      {/* Background */}
-      <div className="absolute inset-0 z-0">
-        <div
-          className="absolute inset-0 opacity-[0.12]"
-          style={{
-            backgroundImage: `radial-gradient(#64748b 0.8px, transparent 0.8px)`,
-            backgroundSize: '32px 32px'
-          }}
+      {/* 🔥 PREMIUM TRANSPARENT BACKGROUND 🔥 */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <img 
+          src="https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?q=80&w=2053&auto=format&fit=crop" 
+          alt="Hospital Background" 
+          className="w-full h-full object-cover object-center opacity-80"
         />
-        <motion.div
-          animate={{ x: [0, 80, 0], y: [0, 40, 0] }}
-          transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute top-[-5%] left-[5%] w-[600px] h-[600px] bg-slate-200/40 rounded-full blur-[120px]"
-        />
+        <div className="absolute inset-0 bg-slate-900/70 mix-blend-multiply"></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/50 to-transparent"></div>
       </div>
 
-      {/* Left Branding */}
+      {/* Left Branding (Glowing Icon & Text) */}
       <div className="hidden lg:flex lg:w-1/2 relative z-10 items-center justify-center">
         <motion.div
           initial={{ opacity: 0, scale: 0.9 }}
@@ -213,48 +202,50 @@ export default function LoginPage() {
           transition={{ duration: 1.2 }}
           className="flex flex-col items-center text-center"
         >
+          {/* Replaced image logo with a glowing Activity icon */}
           <motion.div
             animate={{ y: [0, -10, 0] }}
             transition={{ duration: 5, repeat: Infinity }}
-            className="mb-10 w-28 h-28 bg-white shadow-lg rounded-[2.5rem] flex items-center justify-center"
+            className="mb-10 w-32 h-32 bg-white/10 backdrop-blur-xl shadow-2xl rounded-[2.5rem] flex items-center justify-center overflow-hidden border border-white/20"
           >
-            <Activity className="text-[#475569] w-14 h-14" />
+            <Activity className="text-teal-400 w-16 h-16 drop-shadow-[0_0_15px_rgba(45,212,191,0.8)]" strokeWidth={2.5} />
           </motion.div>
 
-          <h1 className="text-[110px] font-black leading-none tracking-tighter text-[#1e293b]">
+          <h1 className="text-[110px] font-black leading-none tracking-tighter text-white drop-shadow-xl">
             MediCare
-            <span className="block text-[#64748b]">HMS</span>
+            <span className="block text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-emerald-300">HMS</span>
           </h1>
 
-          <div className="h-2 bg-[#1e293b] mt-8 rounded-full opacity-20 w-28" />
+          <div className="h-2 bg-gradient-to-r from-teal-400 to-emerald-300 mt-8 rounded-full w-28 opacity-80 shadow-[0_0_20px_rgba(45,212,191,0.5)]" />
         </motion.div>
       </div>
 
-      {/* Right Login Panel */}
+      {/* Right Login Panel (Frosted Glass) */}
       <div className="flex-1 flex items-center justify-center p-8 relative z-20">
         <motion.div
           initial={{ opacity: 0, x: 40 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8 }}
-          className="w-full max-w-[440px]"
+          className="w-full max-w-[460px]"
         >
-          <div className="bg-white/80 backdrop-blur-3xl rounded-[3.5rem] border border-white/50 p-12 shadow-xl">
+          {/* 🔥 FROSTED GLASS CARD 🔥 */}
+          <div className="bg-white/90 backdrop-blur-2xl rounded-[3.5rem] border border-white/60 p-12 shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
             
             {/* Dynamic Header based on View */}
             <div className="mb-14 flex justify-between items-start">
               <div>
-                <h3 className="text-4xl font-bold text-slate-900">
+                <h3 className="text-4xl font-bold text-slate-900 tracking-tight">
                   {view === 'login' && 'Login'}
                   {view === 'email' && 'Recovery'}
                   {view === 'otp' && 'Verify'}
                   {view === 'reset' && 'New Key'}
                   {view === 'force_reset' && 'Secure Key'}
                 </h3>
-                <p className="text-slate-400 text-sm mt-1">
+                <p className="text-slate-500 font-medium text-sm mt-1">
                   {view === 'login' ? 'Authorized Personnel Only' : 'System Access Recovery'}
                 </p>
               </div>
-              <div className="p-3 bg-slate-50 rounded-2xl text-slate-300">
+              <div className="p-3 bg-slate-100 rounded-2xl text-teal-600 shadow-inner border border-slate-200">
                 {view === 'login' && <Fingerprint size={28} />}
                 {view === 'email' && <Mail size={28} />}
                 {view === 'otp' && <Key size={28} />}
@@ -266,7 +257,6 @@ export default function LoginPage() {
             {/* --- VIEW 1: STANDARD LOGIN --- */}
             {view === 'login' && (
               <form onSubmit={handleSubmit} className="space-y-8">
-                {/* Email */}
                 <div className="relative group">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 mb-2 block">
                     Email Address
@@ -276,12 +266,11 @@ export default function LoginPage() {
                     value={form.email}
                     onChange={e => setForm({ ...form, email: e.target.value })}
                     placeholder="Enter your email"
-                    className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-slate-400 outline-none text-slate-800 text-lg"
+                    className="w-full py-3 bg-transparent border-b-2 border-slate-200 focus:border-teal-500 outline-none text-slate-900 text-lg transition-colors placeholder:text-slate-300 font-medium"
                     required
                   />
                 </div>
 
-                {/* Password */}
                 <div className="relative group">
                   <div className="flex justify-between items-end mb-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 block">
@@ -290,7 +279,7 @@ export default function LoginPage() {
                     <button 
                       type="button" 
                       onClick={() => setView('email')}
-                      className="text-[10px] font-bold text-slate-400 hover:text-slate-600 uppercase tracking-wide"
+                      className="text-[10px] font-bold text-teal-600 hover:text-teal-700 uppercase tracking-wide transition-colors"
                     >
                       Lost Key?
                     </button>
@@ -301,12 +290,12 @@ export default function LoginPage() {
                       value={form.password}
                       onChange={e => setForm({ ...form, password: e.target.value })}
                       placeholder="••••••••"
-                      className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-slate-400 outline-none text-slate-800 text-lg"
+                      className="w-full py-3 bg-transparent border-b-2 border-slate-200 focus:border-teal-500 outline-none text-slate-900 text-lg transition-colors placeholder:text-slate-300 font-medium"
                       required
                     />
                     <button
                       type="button"
-                      className="absolute right-0 bottom-3 text-slate-300 hover:text-slate-600"
+                      className="absolute right-0 bottom-3 text-slate-400 hover:text-teal-600 transition-colors"
                       onClick={() => setShowPwd(prev => !prev)}
                     >
                       {showPwd ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -314,13 +303,12 @@ export default function LoginPage() {
                   </div>
                 </div>
 
-                {/* Submit */}
                 <motion.button
                   whileHover={{ y: -3 }}
                   whileTap={{ scale: 0.98 }}
                   type="submit"  
                   disabled={loading}
-                  className="w-full mt-10 bg-[#1e293b] text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-lg disabled:opacity-60"
+                  className="w-full mt-10 bg-slate-900 text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-xl hover:shadow-2xl hover:bg-slate-800 transition-all disabled:opacity-60"
                 >
                   {loading ? (
                     <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -338,7 +326,7 @@ export default function LoginPage() {
             {view === 'force_reset' && (
               <form onSubmit={handleForceReset} className="space-y-8">
                 <div className="text-center mb-6">
-                  <p className="text-sm text-slate-500">Since this is your first time logging in, you must replace your temporary phone number password with a secure one.</p>
+                  <p className="text-sm font-medium text-slate-500">Since this is your first time logging in, you must replace your temporary phone number password with a secure one.</p>
                 </div>
 
                 <div className="relative group">
@@ -351,12 +339,12 @@ export default function LoginPage() {
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
                       placeholder="At least 8 chars + symbols"
-                      className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-slate-400 outline-none text-slate-800 text-lg"
+                      className="w-full py-3 bg-transparent border-b-2 border-slate-200 focus:border-teal-500 outline-none text-slate-900 text-lg transition-colors placeholder:text-slate-300 font-medium"
                       required
                     />
                     <button
                       type="button"
-                      className="absolute right-0 bottom-3 text-slate-300 hover:text-slate-600"
+                      className="absolute right-0 bottom-3 text-slate-400 hover:text-teal-600"
                       onClick={() => setShowPwd(prev => !prev)}
                     >
                       {showPwd ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -373,7 +361,7 @@ export default function LoginPage() {
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-slate-400 outline-none text-slate-800 text-lg"
+                    className="w-full py-3 bg-transparent border-b-2 border-slate-200 focus:border-teal-500 outline-none text-slate-900 text-lg transition-colors placeholder:text-slate-300 font-medium"
                     required
                   />
                 </div>
@@ -383,7 +371,7 @@ export default function LoginPage() {
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={loading}
-                  className="w-full mt-10 bg-[#1e293b] text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-lg disabled:opacity-60"
+                  className="w-full mt-10 bg-slate-900 text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-xl hover:shadow-2xl hover:bg-slate-800 transition-all disabled:opacity-60"
                 >
                   {loading ? (
                     <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -409,7 +397,7 @@ export default function LoginPage() {
                     value={resetEmail}
                     onChange={e => setResetEmail(e.target.value)}
                     placeholder="Enter your email"
-                    className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-slate-400 outline-none text-slate-800 text-lg"
+                    className="w-full py-3 bg-transparent border-b-2 border-slate-200 focus:border-teal-500 outline-none text-slate-900 text-lg transition-colors placeholder:text-slate-300 font-medium"
                     required
                   />
                 </div>
@@ -419,7 +407,7 @@ export default function LoginPage() {
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={loading}
-                  className="w-full mt-10 bg-[#1e293b] text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-lg disabled:opacity-60"
+                  className="w-full mt-10 bg-slate-900 text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-xl hover:shadow-2xl hover:bg-slate-800 transition-all disabled:opacity-60"
                 >
                   {loading ? (
                     <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -448,18 +436,18 @@ export default function LoginPage() {
                     value={otp}
                     onChange={e => setOtp(e.target.value.replace(/\D/g, ''))} 
                     placeholder="------"
-                    className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-slate-400 outline-none text-slate-800 text-3xl tracking-[0.5em] text-center"
+                    className="w-full py-3 bg-transparent border-b-2 border-teal-500 focus:border-teal-600 outline-none text-slate-900 text-3xl tracking-[0.5em] text-center font-bold"
                     required
                   />
                 </div>
 
-                <div className="text-center mt-4 text-sm">
+                <div className="text-center mt-4 text-sm font-medium">
                   <span className="text-slate-500">Didn't receive the code? </span>
                   {canResend ? (
                     <button
                       type="button"
                       onClick={(e) => handleSendOtp(e)}
-                      className="font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                      className="font-bold text-teal-600 hover:text-teal-800 transition-colors"
                     >
                       Resend OTP
                     </button>
@@ -475,7 +463,7 @@ export default function LoginPage() {
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={loading}
-                  className="w-full mt-6 bg-[#1e293b] text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-lg disabled:opacity-60"
+                  className="w-full mt-6 bg-slate-900 text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-xl hover:shadow-2xl hover:bg-slate-800 transition-all disabled:opacity-60"
                 >
                   {loading ? (
                     <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -502,12 +490,12 @@ export default function LoginPage() {
                       value={newPassword}
                       onChange={e => setNewPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full py-3 bg-transparent border-b-2 border-slate-100 focus:border-slate-400 outline-none text-slate-800 text-lg"
+                      className="w-full py-3 bg-transparent border-b-2 border-slate-200 focus:border-teal-500 outline-none text-slate-900 text-lg transition-colors placeholder:text-slate-300 font-medium"
                       required
                     />
                     <button
                       type="button"
-                      className="absolute right-0 bottom-3 text-slate-300 hover:text-slate-600"
+                      className="absolute right-0 bottom-3 text-slate-400 hover:text-teal-600 transition-colors"
                       onClick={() => setShowPwd(prev => !prev)}
                     >
                       {showPwd ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -520,7 +508,7 @@ export default function LoginPage() {
                   whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={loading}
-                  className="w-full mt-10 bg-[#1e293b] text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-lg disabled:opacity-60"
+                  className="w-full mt-10 bg-slate-900 text-white font-bold py-5 rounded-[1.5rem] flex items-center justify-center gap-3 shadow-xl hover:shadow-2xl hover:bg-slate-800 transition-all disabled:opacity-60"
                 >
                   {loading ? (
                     <div className="h-5 w-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -536,7 +524,6 @@ export default function LoginPage() {
 
             {/* Bottom Links Container */}
             <div className="mt-14 flex flex-col items-center gap-4 text-center">
-              {/* Show "Back to Login" if we are in the recovery flow or force reset */}
               {view !== 'login' && (
                 <button
                   type="button"
@@ -552,7 +539,7 @@ export default function LoginPage() {
               
               <Link
                 to="/register"
-                className="text-xs font-black text-slate-300 hover:text-slate-500 uppercase tracking-[0.15em]"
+                className="text-[11px] font-black text-slate-400 hover:text-teal-600 uppercase tracking-[0.2em] transition-colors"
               >
                 Request Access Profile
               </Link>
