@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { Spinner, PageHeader } from '../../components/common';
+import { Spinner } from '../../components/common';
 import { formatDate } from '../../utils/helpers';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Lock } from 'lucide-react';
+import { Lock, Mail, Phone, MapPin, Calendar, Briefcase, Award, X, ShieldCheck, User } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export default function StaffProfile() {
   const { user } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Password Change States
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
   const [passwords, setPasswords] = useState({ currentPassword: '', newPassword: '' });
@@ -50,178 +50,120 @@ export default function StaffProfile() {
   const data = profile || {};
 
   return (
-    <div>
-      <PageHeader title="My Profile" subtitle="View your staff details and manage security" />
+    // 🔥 Added pt-6 here to fix the gap at the very top!
+    <div className="max-w-6xl mx-auto pb-10 pt-6 font-sans">
+      
+      {/* Clean Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-8"
+      >
+        <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Staff Profile</h1>
+        <p className="text-slate-500 text-sm mt-1">Official hospital staff credentials and account security</p>
+      </motion.div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Avatar card */}
-        <div className="card text-center flex flex-col items-center">
-          <div className="w-24 h-24 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-3xl font-bold mx-auto mb-4">
-            {(data.full_name || user?.name)?.[0]?.toUpperCase() || 'S'}
-          </div>
-
-          <p className="font-semibold text-gray-900 text-lg">
-            {data.full_name || user?.name}
-          </p>
-
-          <p className="text-sm text-gray-500">
-            {data.email || user?.email}
-          </p>
-
-          <span className="inline-block mt-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium capitalize mb-6">
-            {data.role || user?.role || 'Staff'}
-          </span>
-
-          {/* Change Password Button */}
-          {!showPasswordForm && (
-            <button 
-              onClick={() => setShowPasswordForm(true)}
-              className="mt-auto flex items-center gap-2 text-sm text-gray-600 hover:text-blue-600 border border-gray-300 hover:border-blue-600 px-4 py-2 rounded transition-colors"
-            >
-              <Lock size={16} />
-              Change Password
-            </button>
-          )}
-        </div>
-
-        {/* Info card */}
-        <div className="lg:col-span-2 flex flex-col gap-6">
-          <div className="card">
-            <div className="flex items-center justify-between mb-4 border-b pb-3">
-              <h2 className="font-semibold text-gray-900">Personal Information</h2>
-              <span className="text-xs text-gray-400">Read Only</span>
+      <div className="grid lg:grid-cols-4 gap-6">
+        
+        {/* Left Column: ID Badge */}
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="lg:col-span-1 space-y-6">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 text-center">
+            <div className="w-24 h-24 mx-auto rounded-full bg-blue-50 flex items-center justify-center text-blue-600 text-3xl font-bold mb-4 border-4 border-white shadow-sm">
+              {(data.full_name || user?.name)?.[0]?.toUpperCase() || 'S'}
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-6">
-              {/* Full Name */}
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Full Name</p>
-                <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100">
-                  {data.full_name || '—'}
-                </p>
+            <h2 className="font-bold text-lg text-slate-900 mb-1">
+              {data.full_name || user?.name}
+            </h2>
+            <p className="text-sm font-medium text-slate-500 mb-4 truncate">
+              {data.email || user?.email}
+            </p>
+            
+            <div className="w-full space-y-2 mb-6">
+              <div className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5">
+                <ShieldCheck size={14} />
+                {data.role || user?.role || 'Staff Member'}
               </div>
-
-              {/* Email */}
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Email</p>
-                <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100">
-                  {data.email || '—'}
-                </p>
-              </div>
-
-              {/* Phone */}
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Phone</p>
-                <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100">
-                  {data.phone || '—'}
-                </p>
-              </div>
-
-              {/* Date of Birth */}
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Date of Birth</p>
-                <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100">
-                  {data.dob ? formatDate(data.dob) : '—'}
-                </p>
-              </div>
-
-              {/* Gender */}
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Gender</p>
-                <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100 capitalize">
-                  {data.gender || '—'}
-                </p>
-              </div>
-
-              {/* Department (If applicable) */}
               {data.department && (
-                <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Department</p>
-                  <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100 capitalize">
-                    {data.department || '—'}
-                  </p>
+                <div className="px-3 py-1.5 bg-slate-50 text-slate-600 text-xs font-bold uppercase tracking-wider rounded-lg border border-slate-100">
+                  {data.department} Dept
                 </div>
               )}
+            </div>
 
-              {/* Registration Date */}
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Joined Date</p>
-                <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100">
-                  {data.created_at ? formatDate(data.created_at) : '—'}
-                </p>
-              </div>
+            <button 
+              onClick={() => setShowPasswordForm(true)}
+              className="w-full flex items-center justify-center gap-2 text-sm font-bold text-slate-600 hover:text-blue-600 py-2.5 bg-slate-50 hover:bg-blue-50 rounded-xl transition-colors border border-slate-100 hover:border-blue-100"
+            >
+              <Lock size={16} />
+              Update Password
+            </button>
+          </div>
+        </motion.div>
 
-              {/* Address (Spans Full Width) */}
-              <div className="sm:col-span-2">
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Address</p>
-                <p className="text-sm font-medium text-gray-900 bg-gray-50 p-2 rounded border border-gray-100 min-h-[40px]">
-                  {data.address || '—'}
-                </p>
-              </div>
+        {/* Right Column: Information Cards */}
+        <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-3 space-y-6">
+          
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 text-sm uppercase tracking-wider">Official Credentials</h3>
+              <span className="text-xs font-bold text-slate-400 bg-white border border-slate-200 px-2 py-1 rounded text-center">Read Only</span>
+            </div>
+
+            <div className="p-6 md:p-8 grid md:grid-cols-2 gap-6">
+              {[
+                { icon: Briefcase, label: 'Designation', value: data.role || 'Staff' },
+                { icon: Mail, label: 'Work Email', value: data.email },
+                { icon: Phone, label: 'Contact Number', value: data.phone },
+                { icon: Calendar, label: 'Date Joined', value: data.created_at ? formatDate(data.created_at) : '—' },
+                { icon: User, label: 'Gender', value: data.gender },
+                { icon: MapPin, label: 'Registered Address', value: data.address, fullWidth: true },
+              ].map((item, idx) => (
+                <div key={idx} className={`${item.fullWidth ? 'md:col-span-2' : ''}`}>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <item.icon size={14} /> {item.label}
+                  </p>
+                  <div className="text-sm font-medium text-slate-900 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 capitalize">
+                    {item.value || 'Not Disclosed'}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
-          {/* Change Password Form Card (Only visible when clicked) */}
+          {/* Clean Password Update Form */}
           {showPasswordForm && (
-            <div className="card border-t-4 border-t-blue-500 transition-all duration-300">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900 flex items-center gap-2">
-                  <Lock size={18} />
-                  Change Password
-                </h2>
-                <button 
-                  onClick={() => setShowPasswordForm(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  ✕
-                </button>
+            <div className="bg-white rounded-2xl p-6 md:p-8 shadow-md border border-slate-200 animate-in fade-in slide-in-from-bottom-4 duration-300">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Change System Password</h3>
+                  <p className="text-slate-500 text-sm mt-0.5">Please ensure your new password is secure.</p>
+                </div>
+                <button onClick={() => setShowPasswordForm(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-colors"><X size={20} /></button>
               </div>
 
-              <form onSubmit={handlePasswordChange} className="space-y-4">
-                <div className="grid sm:grid-cols-2 gap-4">
+              <form onSubmit={handlePasswordChange} className="space-y-5">
+                <div className="grid md:grid-cols-2 gap-5">
                   <div>
-                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">Current Password</label>
-                    <input
-                      type="password"
-                      required
-                      className="input-field text-sm w-full"
-                      value={passwords.currentPassword}
-                      onChange={e => setPasswords({ ...passwords, currentPassword: e.target.value })}
-                    />
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Current Password</label>
+                    <input type="password" required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all" value={passwords.currentPassword} onChange={e => setPasswords({ ...passwords, currentPassword: e.target.value })} />
                   </div>
                   <div>
-                    <label className="text-xs text-gray-500 uppercase tracking-wide mb-1 block">New Password</label>
-                    <input
-                      type="password"
-                      required
-                      className="input-field text-sm w-full"
-                      value={passwords.newPassword}
-                      onChange={e => setPasswords({ ...passwords, newPassword: e.target.value })}
-                    />
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1.5">New Password</label>
+                    <input type="password" required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all" value={passwords.newPassword} onChange={e => setPasswords({ ...passwords, newPassword: e.target.value })} />
                   </div>
                 </div>
                 
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowPasswordForm(false)}
-                    className="btn-secondary text-sm"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={savingPassword}
-                    className="btn-primary text-sm"
-                  >
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                  <button type="button" onClick={() => setShowPasswordForm(false)} className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors">Cancel</button>
+                  <button type="submit" disabled={savingPassword} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl text-sm font-bold shadow-sm transition-all disabled:opacity-50">
                     {savingPassword ? 'Updating...' : 'Update Password'}
                   </button>
                 </div>
               </form>
             </div>
           )}
-
-        </div>
+        </motion.div>
       </div>
     </div>
   );
