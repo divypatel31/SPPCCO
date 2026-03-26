@@ -161,8 +161,8 @@ exports.changePassword = async (req, res) => {
 
     // 🔥 THE NEW CHECK: Prevent using the same password
     if (currentPassword === newPassword) {
-      return res.status(400).json({ 
-        message: "Your new password cannot be the same as your old password. Please enter a different one." 
+      return res.status(400).json({
+        message: "Your new password cannot be the same as your old password. Please enter a different one."
       });
     }
 
@@ -279,14 +279,15 @@ exports.forgotPassword = async (req, res) => {
     );
 
     const message = `Your password reset OTP is: ${otp}\nThis code is valid for 15 minutes.\nIf you did not request this, please ignore this email.`;
-    
+
     const uniqueSubject = `Password Reset OTP - MediCare HMS (${new Date().toLocaleTimeString()})`;
 
-    sendEmail({
+    // 🔥 ADD AWAIT HERE:
+    await sendEmail({
       to: email,
       subject: uniqueSubject,
       text: message
-    }).catch(err => console.error("Background Email Error:", err));
+    });
 
     res.json({ message: "OTP sent to email successfully" });
 
@@ -304,7 +305,7 @@ exports.verifyOtp = async (req, res) => {
     const { email, otp } = req.body;
 
     const [users] = await db.execute(
-      "SELECT * FROM users WHERE email = ? AND reset_otp = ?", 
+      "SELECT * FROM users WHERE email = ? AND reset_otp = ?",
       [email, otp]
     );
 
@@ -340,7 +341,7 @@ exports.resetPassword = async (req, res) => {
 
     // 1. Verify OTP one last time for security
     const [users] = await db.execute(
-      "SELECT * FROM users WHERE email = ? AND reset_otp = ?", 
+      "SELECT * FROM users WHERE email = ? AND reset_otp = ?",
       [email, otp]
     );
 
