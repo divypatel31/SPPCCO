@@ -1,34 +1,40 @@
-const nodemailer = require('nodemailer');
+// server/utils/sendEmail.js
 
 const sendEmail = async (options) => {
   try {
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com',
-      port: 465,      
-      secure: true,   
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
+    // 🚀 Using Brevo HTTP API (Bypasses Render's SMTP Port Blocks)
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'api-key': process.env.BREVO_API_KEY // We will add this to Render next
       },
-      tls: {
-        rejectUnauthorized: false
-      },
-      family: 4      
+      body: JSON.stringify({
+        sender: { 
+          name: "MediCare HMS Support", 
+          email: process.env.EMAIL_USER // Keep using your Gmail address here
+        },
+        to: [
+          { email: options.to }
+        ],
+        subject: options.subject,
+        textContent: options.text,
+        htmlContent: options.html
+      })
     });
 
-    const mailOptions = {
-      from: `"MediCare HMS" <${process.env.EMAIL_USER}>`,
-      to: options.to,
-      subject: options.subject,
-      text: options.text,
-      html: options.html
-    };
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error("🚨 Brevo API Rejected the Request:", errorData);
+      throw new Error("API Email Failed");
+    }
 
-    await transporter.sendMail(mailOptions);
+    console.log("✅ Email successfully sent via HTTP API!");
 
   } catch (error) {
-    console.error("🚨 NODEMAILER ERROR:", error);
-    throw new Error("Email could not be sent. Please check credentials.");
+    console.error("🚨 HTTP EMAIL ERROR:", error);
+    throw new Error("Email could not be sent. Please check API credentials.");
   }
 };
 
