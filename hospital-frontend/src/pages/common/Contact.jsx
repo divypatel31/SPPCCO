@@ -14,8 +14,8 @@ export default function Contact() {
   };
 
   return (
-    // 🔥 Added pt-6 here to fix the gap at the very top!
-    <div className="max-w-6xl mx-auto pb-10 pt-6 font-sans">
+    // 🔥 FIX: Added px-4 sm:px-6 lg:px-8 for perfect side spacing
+    <div className="max-w-6xl mx-auto pb-10 pt-6 px-4 sm:px-6 lg:px-8 font-sans">
 
       {/* Clean, Professional Header */}
       <motion.div
@@ -30,7 +30,7 @@ export default function Contact() {
           <p className="text-slate-500 text-sm mt-1">Important contacts and support details for MediCare HMS</p>
         </div>
 
-        <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-lg border border-blue-100">
+        <div className="flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-lg border border-blue-100 w-fit">
           <ShieldCheck className="text-blue-600 w-4 h-4" />
           <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">
             Internal Network

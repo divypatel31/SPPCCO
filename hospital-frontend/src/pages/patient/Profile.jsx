@@ -74,8 +74,8 @@ export default function PatientProfile() {
   const data = profile || {};
 
   return (
-    // 🔥 Added pt-6 here to fix the gap at the very top!
-    <div className="max-w-5xl mx-auto pb-10 pt-6 font-sans">
+    // 🔥 FIX: Added px-4 sm:px-6 lg:px-8 for perfect side spacing
+    <div className="max-w-5xl mx-auto pb-10 pt-6 px-4 sm:px-6 lg:px-8 font-sans">
       
       {/* Clean Header */}
       <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
@@ -93,7 +93,7 @@ export default function PatientProfile() {
             </div>
             
             <h2 className="font-bold text-lg text-slate-900 truncate mb-1">{data.full_name || user?.name}</h2>
-            <p className="text-sm text-slate-500 mb-4 truncate">{data.email || user?.email}</p>
+            <p className="text-sm text-slate-500 mb-4 truncate px-2">{data.email || user?.email}</p>
             
             <div className="flex items-center justify-center gap-2 mb-6">
               <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold uppercase tracking-wider rounded-md">Patient</span>
@@ -141,7 +141,7 @@ export default function PatientProfile() {
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                     <item.icon size={14} /> {item.label}
                   </p>
-                  <p className="text-sm font-medium text-slate-900 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 capitalize">{item.value || '—'}</p>
+                  <p className={`text-sm font-medium text-slate-900 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 ${item.label.includes('Email') ? 'lowercase' : 'capitalize'}`}>{item.value || '—'}</p>
                 </div>
               ))}
 
