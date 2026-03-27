@@ -1,5 +1,5 @@
 const db = require("../config/db");
-const sendEmail = require("../utils/sendEmail"); // 🔥 Import the new email utility
+const sendEmail = require("../utils/sendEmail"); // 🔥 Imported Email Utility
 
 /* ============================
    BOOK APPOINTMENT
@@ -39,9 +39,9 @@ exports.bookAppointment = async (req, res) => {
       });
     }
 
-    // 3. Wallet Balance Check (and fetch user details for email)
+    // 3. Wallet Balance Check (🔥 Added email and full_name for the email notification)
     const [userRows] = await db.execute(
-      `SELECT full_name, email, wallet_balance FROM users WHERE user_id = ?`,
+      `SELECT wallet_balance, email, full_name FROM users WHERE user_id = ?`,
       [patient_id]
     );
 
@@ -51,7 +51,7 @@ exports.bookAppointment = async (req, res) => {
       });
     }
 
-    const patient = userRows[0]; // Save patient details for the email
+    const { email, full_name } = userRows[0];
 
     // 4. Past Time & 7-Day Restrictions
     const now = new Date();
@@ -102,17 +102,39 @@ exports.bookAppointment = async (req, res) => {
       [patient_id, department, appointment_date, start_time, "pending"]
     );
 
-    // 🔥 7. SEND BOOKING CONFIRMATION EMAIL
+    // 🔥 7. SEND HTML EMAIL NOTIFICATION TO PATIENT
     try {
-      const emailMessage = `Dear ${patient.full_name},\n\nWe have successfully received your appointment request at MediCare HMS.\n\nDetails:\n- Department: ${department.toUpperCase()}\n- Date: ${appointment_date}\n- Time: ${start_time}\n- Status: Pending Confirmation\n\nPlease wait for the receptionist to confirm your appointment. You will receive further updates in your dashboard.\n\nThank you,\nMediCare HMS Support`;
-      
+      const bookHtml = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px; max-width: 600px; margin: auto;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h2 style="color: #0d9488; margin: 0;">Appointment Requested</h2>
+          </div>
+          <p>Dear <b>${full_name}</b>,</p>
+          <p>We have successfully received your appointment request at MediCare HMS.</p>
+          
+          <div style="background-color: #f0fdfa; padding: 15px; border-radius: 8px; border-left: 4px solid #0d9488; margin: 20px 0;">
+            <p style="margin: 5px 0;"><b>Department:</b> <span style="text-transform: capitalize;">${department}</span></p>
+            <p style="margin: 5px 0;"><b>Date:</b> ${new Date(appointment_date).toDateString()}</p>
+            <p style="margin: 5px 0;"><b>Time:</b> ${start_time}</p>
+            <p style="margin: 5px 0;"><b>Status:</b> Pending Confirmation</p>
+          </div>
+
+          <p>Your request is currently pending. You will receive another email once a doctor has been assigned and your time slot is officially confirmed.</p>
+          <p>Best regards,<br><b>MediCare HMS Team</b></p>
+        </div>
+      `;
+
+      const fallbackText = `Dear ${full_name},\n\nWe have received your appointment request for ${department} on ${appointment_date} at ${start_time}.\n\nYour request is currently pending. We will notify you once a doctor is assigned.\n\nBest regards,\nMediCare HMS Team`;
+
       await sendEmail({
-        to: patient.email,
-        subject: `Appointment Requested - ${appointment_date}`,
-        text: emailMessage
+        to: email,
+        subject: "Appointment Request Received - MediCare HMS",
+        html: bookHtml,
+        text: fallbackText
       });
+      console.log("✅ Patient Booking Request Email Sent to Brevo!");
     } catch (emailErr) {
-      console.error("Non-fatal: Booking email failed to send", emailErr);
+      console.error("🚨 Non-fatal: Booking email failed", emailErr);
     }
 
     res.status(201).json({ message: "Appointment requested successfully. Fee will be deducted upon confirmation." });
@@ -152,9 +174,9 @@ exports.cancelAppointment = async (req, res) => {
   try {
     const patient_id = req.user.id;
 
-    // 🔥 Modified to also fetch user details for the email
+    // 🔥 Updated to join with users table to get patient email and name
     const [rows] = await db.execute(
-      `SELECT a.appointment_date, a.appointment_time, a.department, u.full_name, u.email 
+      `SELECT a.appointment_date, a.appointment_time, a.department, u.email, u.full_name 
        FROM appointments a
        JOIN users u ON a.patient_id = u.user_id
        WHERE a.appointment_id=? AND a.patient_id=?`,
@@ -163,7 +185,7 @@ exports.cancelAppointment = async (req, res) => {
 
     if (rows.length === 0) return res.status(404).json({ message: "Appointment not found" });
 
-    const { appointment_date, appointment_time, department, full_name, email } = rows[0];
+    const { appointment_date, appointment_time, department, email, full_name } = rows[0];
     const appointmentDateTime = new Date(`${appointment_date}T${appointment_time}`);
     const now = new Date();
     const diffHours = (appointmentDateTime - now) / (1000 * 60 * 60);
@@ -177,17 +199,38 @@ exports.cancelAppointment = async (req, res) => {
       [req.params.id, patient_id]
     );
 
-    // 🔥 SEND CANCELLATION EMAIL
+    // 🔥 SEND HTML EMAIL NOTIFICATION FOR PATIENT CANCELLATION
     try {
-      const cancelMessage = `Dear ${full_name},\n\nYour appointment at MediCare HMS has been successfully cancelled.\n\nCancelled Details:\n- Department: ${department.toUpperCase()}\n- Date: ${appointment_date}\n- Time: ${appointment_time}\n\nIf you cancelled a confirmed appointment, your wallet refund will be processed according to our hospital policy.\n\nThank you,\nMediCare HMS Support`;
-      
+      const cancelHtml = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; border: 1px solid #fee2e2; border-radius: 10px; max-width: 600px; margin: auto;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h2 style="color: #dc2626; margin: 0;">Appointment Cancelled</h2>
+          </div>
+          <p>Dear <b>${full_name}</b>,</p>
+          <p>Your appointment has been successfully cancelled as per your request.</p>
+          
+          <div style="background-color: #fef2f2; padding: 15px; border-radius: 8px; border-left: 4px solid #dc2626; margin: 20px 0;">
+            <p style="margin: 5px 0;"><b>Department:</b> <span style="text-transform: capitalize;">${department}</span></p>
+            <p style="margin: 5px 0;"><b>Date:</b> ${new Date(appointment_date).toDateString()}</p>
+            <p style="margin: 5px 0;"><b>Time:</b> ${appointment_time.slice(0, 5)}</p>
+          </div>
+
+          <p>If you cancelled an already-confirmed appointment, any applicable wallet refunds will be processed according to hospital policy.</p>
+          <p>Best regards,<br><b>MediCare HMS Team</b></p>
+        </div>
+      `;
+
+      const fallbackText = `Dear ${full_name},\n\nYour appointment for ${department} on ${appointment_date} at ${appointment_time} has been successfully cancelled.\n\nBest regards,\nMediCare HMS Team`;
+
       await sendEmail({
         to: email,
-        subject: `Appointment Cancelled - ${appointment_date}`,
-        text: cancelMessage
+        subject: "Appointment Cancelled - MediCare HMS",
+        html: cancelHtml,
+        text: fallbackText
       });
+      console.log("✅ Patient Cancellation Email Sent to Brevo!");
     } catch (emailErr) {
-      console.error("Non-fatal: Cancellation email failed to send", emailErr);
+      console.error("🚨 Non-fatal: Cancellation email failed", emailErr);
     }
 
     res.json({ message: "Appointment cancelled successfully" });
