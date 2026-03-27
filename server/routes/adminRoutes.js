@@ -22,6 +22,7 @@ router.get("/consultation-fee", adminController.getConsultationFee);
    USER MANAGEMENT
 ========================= */
 router.get("/users", adminController.getAllUsers);
+router.post("/staff", adminController.addStaff);
 router.put("/users/:id", adminController.updateUser);
 router.put("/users/:id/status", adminController.toggleUserStatus);
 router.delete("/users/:id", adminController.deleteUser); // 🔥 FIXED: Removed undefined middleware

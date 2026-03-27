@@ -1,12 +1,12 @@
 const db = require("../config/db");
+const bcrypt = require("bcryptjs"); // 🔥 Imported for hashing new staff passwords
+const sendEmail = require('../utils/sendEmail'); // 🔥 Imported for emails
 
 exports.getDashboardStats = async (req, res) => {
     try {
-        // 🔥 NEW: Fetch dynamic fee
         const [adminRows] = await db.execute("SELECT consultation_fee FROM users WHERE role = 'admin' LIMIT 1");
         const adminFee = Number(adminRows[0]?.consultation_fee) || 0;
 
-        // 1. Get User Counts
         const [users] = await db.execute("SELECT role, COUNT(*) as count FROM users GROUP BY role");
         let total_patients = 0, total_doctors = 0, total_receptionists = 0, total_lab_techs = 0, total_pharmacists = 0;
         
@@ -20,11 +20,9 @@ exports.getDashboardStats = async (req, res) => {
 
         const [appointments] = await db.execute("SELECT COUNT(*) AS total_appointments FROM appointments");
 
-        // 2. Calculate Revenue based on Wallet Deductions
         const [pharmacy] = await db.execute("SELECT SUM(total_amount) AS total FROM bills WHERE payment_status = 'paid'");
         const pharmacy_revenue = parseFloat(pharmacy[0].total) || 0;
 
-        // 🔥 USE DYNAMIC FEE
         const [consultations] = await db.execute("SELECT COUNT(*) as count FROM appointments WHERE status IN ('arrived', 'in_consultation', 'completed')");
         const consultation_revenue = (consultations[0].count || 0) * adminFee; 
 
@@ -33,23 +31,19 @@ exports.getDashboardStats = async (req, res) => {
 
         const total_revenue = pharmacy_revenue + consultation_revenue + lab_revenue;
 
-        // 3. Bill Counts
         const [paidBills] = await db.execute("SELECT COUNT(*) AS count FROM bills WHERE payment_status = 'paid'");
         const [pendingBills] = await db.execute("SELECT COUNT(*) AS count FROM bills WHERE payment_status = 'unpaid' OR payment_status = 'pending'");
 
-        // 4. Today & Monthly Totals
         const [todayPharmacy] = await db.execute("SELECT SUM(total_amount) AS total FROM bills WHERE payment_status = 'paid' AND DATE(paid_at) = CURDATE()");
         const [todayConsultations] = await db.execute("SELECT COUNT(*) as count FROM appointments WHERE status IN ('arrived', 'in_consultation', 'completed') AND DATE(appointment_date) = CURDATE()");
         const [todayLabs] = await db.execute("SELECT SUM(test_price) as total FROM lab_requests WHERE DATE(created_at) = CURDATE()");
         
-        // 🔥 USE DYNAMIC FEE
         const today_revenue = (parseFloat(todayPharmacy[0].total) || 0) + ((todayConsultations[0].count || 0) * adminFee) + (parseFloat(todayLabs[0].total) || 0);
 
         const [monthPharmacy] = await db.execute("SELECT SUM(total_amount) AS total FROM bills WHERE payment_status = 'paid' AND MONTH(paid_at) = MONTH(CURDATE())");
         const [monthConsultations] = await db.execute("SELECT COUNT(*) as count FROM appointments WHERE status IN ('arrived', 'in_consultation', 'completed') AND MONTH(appointment_date) = MONTH(CURDATE())");
         const [monthLabs] = await db.execute("SELECT SUM(test_price) as total FROM lab_requests WHERE MONTH(created_at) = MONTH(CURDATE())");
 
-        // 🔥 USE DYNAMIC FEE
         const monthly_revenue = (parseFloat(monthPharmacy[0].total) || 0) + ((monthConsultations[0].count || 0) * adminFee) + (parseFloat(monthLabs[0].total) || 0);
 
         res.json({
@@ -73,7 +67,6 @@ exports.getDashboardStats = async (req, res) => {
 
 exports.getMonthlyRevenue = async (req, res) => {
     try {
-        // 🔥 NEW: Fetch dynamic fee
         const [adminRows] = await db.execute("SELECT consultation_fee FROM users WHERE role = 'admin' LIMIT 1");
         const adminFee = Number(adminRows[0]?.consultation_fee) || 0;
 
@@ -100,7 +93,7 @@ exports.getMonthlyRevenue = async (req, res) => {
             GROUP BY month
             ORDER BY month DESC
             LIMIT 6
-        `, [adminFee]); // 🔥 PASS DYNAMIC FEE INTO SQL QUERY
+        `, [adminFee]);
 
         res.json(rows.map(r => ({
             month: r.month,
@@ -112,6 +105,77 @@ exports.getMonthlyRevenue = async (req, res) => {
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
+};
+
+/* =======================================
+   🔥 ADD NEW STAFF MEMBER (ADMIN ONLY)
+======================================= */
+exports.addStaff = async (req, res) => {
+  try {
+    const { full_name, email, phone, password, role, department } = req.body;
+
+    if (!full_name || !email || !password || !phone || !role) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    if (role === 'patient') {
+      return res.status(400).json({ message: "Use the patient registration route for patients." });
+    }
+
+    const [existing] = await db.execute("SELECT user_id FROM users WHERE email = ?", [email]);
+    if (existing.length > 0) return res.status(400).json({ message: "Email already exists" });
+
+    const [existingPhone] = await db.execute("SELECT user_id FROM users WHERE phone = ?", [phone]);
+    if (existingPhone.length > 0) return res.status(400).json({ message: "Phone number already exists" });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    await db.execute(
+      `INSERT INTO users (full_name, email, phone, password_hash, role, department, status, created_by) 
+       VALUES (?, ?, ?, ?, ?, ?, 'active', 'admin')`,
+      [full_name, email, phone, hashedPassword, role, department || null]
+    );
+
+    // 🔥 Send Onboarding Credentials Email
+    try {
+      const staffWelcomeHtml = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px; max-width: 600px; margin: auto;">
+          <div style="text-align: center; background-color: #0f172a; padding: 20px; border-radius: 10px 10px 0 0; margin:-20px -20px 20px -20px;">
+            <h2 style="color: #ffffff; margin: 0;">Welcome to the Team!</h2>
+          </div>
+          <p>Dear <b>${full_name}</b>,</p>
+          <p>An administrative account has been created for you on the MediCare Hospital Management System.</p>
+          
+          <div style="background-color: #f1f5f9; padding: 20px; border-radius: 8px; border: 1px solid #cbd5e1; margin: 20px 0;">
+            <p style="margin: 0 0 10px 0;"><b>Your Official Credentials:</b></p>
+            <p style="margin: 5px 0;"><b>Role:</b> <span style="text-transform: capitalize;">${role}</span></p>
+            <p style="margin: 5px 0;"><b>Login Email:</b> ${email}</p>
+            <p style="margin: 5px 0;"><b>Temporary Password:</b> <span style="background-color: #e2e8f0; padding: 2px 6px; border-radius: 4px; font-family: monospace;">${password}</span></p>
+          </div>
+
+          <p style="color: #b91c1c; font-size: 14px;"><b>⚠️ Security Notice:</b> For security reasons, please log in and change your password immediately from your Staff Profile page.</p>
+          
+          <p>Best regards,<br><b>MediCare IT Administration</b></p>
+        </div>
+      `;
+
+      await sendEmail({
+        to: email,
+        subject: "Action Required: Your MediCare System Credentials",
+        html: staffWelcomeHtml,
+        text: `Dear ${full_name},\nYour account has been created.\nRole: ${role}\nEmail: ${email}\nPassword: ${password}\nPlease log in and change your password immediately.`
+      });
+      console.log(`✅ Staff Credentials Email Sent to ${email}`);
+    } catch (emailErr) {
+      console.error("🚨 Non-fatal: Staff onboarding email failed", emailErr);
+    }
+
+    res.status(201).json({ message: "Staff member added and credentials emailed successfully" });
+
+  } catch (err) {
+    console.error("ADD STAFF ERROR:", err);
+    res.status(500).json({ message: "Failed to add staff member" });
+  }
 };
 
 /* GET ALL STAFF USERS */
@@ -147,7 +211,6 @@ exports.updateUser = async (req, res) => {
     const { full_name, email, phone, department } = req.body;
     const userId = req.params.id;
 
-    // 🛡️ VALIDATION 1: Name must be letters and spaces only
     if (full_name) {
       const nameRegex = /^[A-Za-z\s]+$/;
       if (!nameRegex.test(full_name)) {
@@ -155,7 +218,6 @@ exports.updateUser = async (req, res) => {
       }
     }
 
-    // 🛡️ VALIDATION 2: Phone must be 10 digits
     if (phone) {
       const phoneRegex = /^[0-9]{10}$/;
       if (!phoneRegex.test(phone)) {
@@ -163,7 +225,6 @@ exports.updateUser = async (req, res) => {
       }
     }
 
-    // 🔥 Check if email exists for another user
     const [existing] = await db.execute(
       "SELECT user_id FROM users WHERE email = ? AND user_id != ?",
       [email, userId]
@@ -236,7 +297,6 @@ exports.createLabTest = async (req, res) => {
   try {
     const { name, department_id, price, description } = req.body;
 
-    // 🛡️ VALIDATION 3: Lab Test string and positive price
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ message: "Test name is required." });
     }
@@ -259,7 +319,6 @@ exports.updateLabTest = async (req, res) => {
   try {
     const { name, department_id, price, description } = req.body;
 
-    // 🛡️ VALIDATION 4: Lab Test string and positive price
     if (!name || typeof name !== 'string' || name.trim() === '') {
       return res.status(400).json({ message: "Test name is required." });
     }
@@ -306,7 +365,6 @@ exports.toggleLabTestStatus = async (req, res) => {
 exports.updateConsultationFee = async (req, res) => {
   const { consultation_fee } = req.body;
 
-  // 🛡️ VALIDATION 5: Prevent negative consultation fees
   if (Number(consultation_fee) < 0) {
     return res.status(400).json({ message: "Consultation fee cannot be negative." });
   }
@@ -319,16 +377,11 @@ exports.updateConsultationFee = async (req, res) => {
   res.json({ message: "Consultation fee updated" });
 };
 
-/* =======================================
-   GET REVENUE BY DOCTOR (NEW)
-======================================= */
 exports.getDoctorRevenue = async (req, res) => {
   try {
-      // 1. Get the dynamic consultation fee
       const [adminRows] = await db.execute("SELECT consultation_fee FROM users WHERE role = 'admin' LIMIT 1");
       const adminFee = Number(adminRows[0]?.consultation_fee) || 0;
 
-      // 2. Calculate revenue per doctor
       const [rows] = await db.execute(`
           SELECT 
               u.full_name AS doctor_name,
@@ -353,14 +406,10 @@ exports.getDoctorRevenue = async (req, res) => {
   }
 };
 
-/* =======================================
-   GET CURRENT CONSULTATION FEE
-======================================= */
 exports.getConsultationFee = async (req, res) => {
   try {
     const [rows] = await db.execute("SELECT consultation_fee FROM users WHERE role = 'admin' LIMIT 1");
     
-    // Return the fee, or 0 if it hasn't been set yet
     res.json({ fee: rows[0]?.consultation_fee || 0 });
   } catch (error) {
     console.error("GET FEE ERROR:", error);
@@ -368,13 +417,12 @@ exports.getConsultationFee = async (req, res) => {
   }
 };
 
-// DELETE LAB TEST
 exports.deleteLabTest = async (req, res) => {
   try {
     const { id } = req.params;
 
     const [result] = await db.execute(
-      "DELETE FROM lab_tests WHERE lab_test_id = ?", // Check your exact ID column name!
+      "DELETE FROM lab_tests WHERE lab_test_id = ?",
       [id]
     );
 
@@ -394,12 +442,10 @@ exports.deleteLabTest = async (req, res) => {
   }
 };
 
-/* DELETE USER */
 exports.deleteUser = async (req, res) => {
   try {
     const userId = req.params.id;
 
-    // Prevent admin from deleting themselves (assuming ID 1 is super admin)
     if (userId == req.user.id) {
       return res.status(400).json({ message: "You cannot delete your own account" });
     }
@@ -414,7 +460,6 @@ exports.deleteUser = async (req, res) => {
 
   } catch (err) {
     console.error("DELETE USER ERROR:", err);
-    // 🛡️ Safety catch: If the doctor/staff has active appointments or bills tied to them, SQL will reject the delete.
     if (err.code === 'ER_ROW_IS_REFERENCED_2' || err.code === 'ER_ROW_IS_REFERENCED') {
       return res.status(400).json({ message: "Cannot delete user. They have active records (appointments, bills, etc.) tied to them. Please Deactivate them instead." });
     }

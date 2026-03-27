@@ -29,7 +29,7 @@ exports.getPendingAppointments = async (req, res) => {
 };
 
 /* ==============================
-    2️⃣ ASSIGN DOCTOR & CUT MONEY
+   2️⃣ ASSIGN DOCTOR & CUT MONEY
 ================================= */
 exports.assignDoctor = async (req, res) => {
   const { appointment_id, doctor_id } = req.body;
@@ -98,9 +98,10 @@ exports.assignDoctor = async (req, res) => {
       [patient_id]
     );
 
+    // 🔥 Successfully save the transaction to the database
     await conn.commit();
 
-    // 🔥 NEW: Trigger Email Notification after successful commit
+    // 6. Trigger Email Notification (Protected by Try/Catch!)
     if (appointment.patient_email) {
       const emailHtml = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
@@ -121,17 +122,22 @@ exports.assignDoctor = async (req, res) => {
       </div>
     `;
 
-      // 🔥 CRITICAL: Make sure you pass 'html: emailHtml'
-      await sendEmail({
-        to: appointment.patient_email,
-        subject: `Appointment Confirmed - Dr. ${doctorName}`,
-        html: emailHtml
-      });
+      // 🔥 Wrap the email API call to protect the success response
+      try {
+        await sendEmail({
+          to: appointment.patient_email,
+          subject: `Appointment Confirmed - Dr. ${doctorName}`,
+          html: emailHtml
+        });
+      } catch (emailErr) {
+        console.error("🚨 Non-fatal: Assignment confirmation email failed to send", emailErr);
+      }
     }
 
     res.json({ message: "Doctor assigned successfully and ₹100 fee deducted." });
 
   } catch (error) {
+    // Only roll back if the actual database queries failed, not the email
     await conn.rollback();
     console.error("ASSIGN DOCTOR ERROR:", error);
     res.status(error.message.includes("Patient") || error.message.includes("Missing") ? 400 : 500)
@@ -445,11 +451,16 @@ exports.cancelAppointmentByReceptionist = async (req, res) => {
         </div>
       `;
 
-      await sendEmail({
-        to: appt.patient_email,
-        subject: "Notice: Appointment Cancellation - MediCare HMS",
-        html: emailHtml
-      });
+      // 🔥 Wrapped in try...catch so a failed email won't crash the frontend response!
+      try {
+        await sendEmail({
+          to: appt.patient_email,
+          subject: "Notice: Appointment Cancellation - MediCare HMS",
+          html: emailHtml
+        });
+      } catch (emailErr) {
+        console.error("🚨 Non-fatal: Receptionist cancellation email failed to send", emailErr);
+      }
     }
 
     res.json({ message: "Appointment cancelled and patient notified." });

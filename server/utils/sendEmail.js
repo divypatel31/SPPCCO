@@ -24,13 +24,16 @@ const sendEmail = async (options) => {
       })
     });
 
-    if (!response.ok) {
+   if (!response.ok) {
       const errorData = await response.json();
       console.error("🚨 Brevo API Rejected the Request:", errorData);
       throw new Error("API Email Failed");
     }
 
-    console.log("✅ Email successfully sent via HTTP API!");
+    // 🔥 NEW: Get the exact response from Brevo
+    const successData = await response.json();
+    console.log("✅ Brevo accepted the email! Receipt ID:", successData.messageId);
+
 
   } catch (error) {
     console.error("🚨 HTTP EMAIL ERROR:", error);

@@ -43,7 +43,12 @@ function UserFormModal({ open, onClose, onSubmit, form, setForm, saving, editing
                 <label className="text-[11px] font-medium text-slate-500 uppercase tracking-widest mb-1.5 block">Role *</label>
                 <select className="w-full border border-slate-200/60 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl py-2.5 px-4 text-sm font-normal transition-all outline-none appearance-none" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} required disabled={editingUserId}>
                   <option value="">Select identity...</option>
-                  {ROLES.map(r => <option key={r} value={r}>{r === 'lab' ? 'Lab Technician' : r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                  {/* 🔥 THE FIX: Filter out 'patient' so they can only create staff roles here */}
+                  {ROLES.filter(r => r !== 'patient').map(r => (
+                    <option key={r} value={r}>
+                      {r === 'lab' ? 'Lab Technician' : r.charAt(0).toUpperCase() + r.slice(1)}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -143,23 +148,48 @@ export default function UserManagement() {
     catch (err) { toast.error(err.response?.data?.message || "Failed to delete user"); }
   };
 
-  const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.name || !form.email || !form.role) return toast.error('Please fill all required fields');
     setCreating(true);
 
     try {
       if (editingUserId) {
-        await api.put(`/admin/users/${editingUserId}`, { full_name: form.name, email: form.email, phone: form.phone, department: form.department });
+        // Edit existing user
+        await api.put(`/admin/users/${editingUserId}`, { 
+          full_name: form.name, 
+          email: form.email, 
+          phone: form.phone, 
+          department: form.department 
+        });
         toast.success("User updated successfully");
       } else {
-        if (!form.password) { toast.error("Password required"); setCreating(false); return; }
-        await api.post('/auth/register', { name: form.name, email: form.email, phone: form.phone, role: form.role, department: form.department, password: form.password });
-        toast.success(`${form.role} account created!`);
+        if (!form.password) { 
+          toast.error("Password required"); 
+          setCreating(false); 
+          return; 
+        }
+        
+        // 🔥 CHANGED THIS LINE: Point to the new admin staff route!
+        await api.post('/admin/staff', { 
+          full_name: form.name, // Make sure this is full_name, not just name
+          email: form.email, 
+          phone: form.phone, 
+          role: form.role, 
+          department: form.department, 
+          password: form.password 
+        });
+        toast.success(`${form.role} account created & credentials emailed!`);
       }
-      setShowCreate(false); setForm(emptyForm); setEditingUserId(null); fetchUsers();
-    } catch (err) { toast.error(err.response?.data?.message || 'Operation failed'); } 
-    finally { setCreating(false); }
+      setShowCreate(false); 
+      setForm(emptyForm); 
+      setEditingUserId(null); 
+      fetchUsers();
+    } catch (err) { 
+      toast.error(err.response?.data?.message || 'Operation failed'); 
+    } finally { 
+      setCreating(false); 
+    }
   };
 
   // Filter and Search Logic

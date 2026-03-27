@@ -396,7 +396,7 @@ exports.cancelAppointment = async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ message: "Appointment not found" });
+      return res.status(404).json({ message: "Appointment not found or unauthorized" });
     }
 
     const appt = rows[0];
@@ -408,12 +408,12 @@ exports.cancelAppointment = async (req, res) => {
       });
     }
 
-    // 3. Perform database update
+    // 3. Perform database update (🔥 Added doctor_id for extra security)
     await db.execute(
       `UPDATE appointments 
        SET status='cancelled', cancelled_by='doctor'
-       WHERE appointment_id=?`,
-      [appointment_id]
+       WHERE appointment_id=? AND doctor_id=?`,
+      [appointment_id, doctor_id]
     );
 
     // 4. Send Cancellation Email to Patient
@@ -440,11 +440,16 @@ exports.cancelAppointment = async (req, res) => {
         </div>
       `;
 
-      await sendEmail({
-        to: appt.patient_email,
-        subject: "Urgent: Appointment Cancellation - MediCare HMS",
-        html: emailHtml
-      });
+      // 🔥 Wrapped in try...catch so a failed email won't crash the frontend response!
+      try {
+        await sendEmail({
+          to: appt.patient_email,
+          subject: "Urgent: Appointment Cancellation - MediCare HMS",
+          html: emailHtml
+        });
+      } catch (emailErr) {
+        console.error("🚨 Non-fatal: Doctor cancellation email failed to send", emailErr);
+      }
     }
 
     res.json({ message: "Appointment cancelled and patient notified via email." });

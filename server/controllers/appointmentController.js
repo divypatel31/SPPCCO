@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const sendEmail = require("../utils/sendEmail"); // 🔥 Import the new email utility
 
 /* ============================
    BOOK APPOINTMENT
@@ -38,9 +39,9 @@ exports.bookAppointment = async (req, res) => {
       });
     }
 
-    // 3. Wallet Balance Check
+    // 3. Wallet Balance Check (and fetch user details for email)
     const [userRows] = await db.execute(
-      `SELECT wallet_balance FROM users WHERE user_id = ?`,
+      `SELECT full_name, email, wallet_balance FROM users WHERE user_id = ?`,
       [patient_id]
     );
 
@@ -49,6 +50,8 @@ exports.bookAppointment = async (req, res) => {
         message: "Insufficient balance. You need at least ₹100 in your wallet to request an appointment." 
       });
     }
+
+    const patient = userRows[0]; // Save patient details for the email
 
     // 4. Past Time & 7-Day Restrictions
     const now = new Date();
@@ -70,7 +73,6 @@ exports.bookAppointment = async (req, res) => {
     }
 
     // 🔥 5. SLOT CAPACITY LOGIC (DYNAMIC DOCTOR COUNT)
-    // Find out exactly how many active doctors are in this specific department
     const [doctorRows] = await db.execute(
       `SELECT COUNT(*) as doctor_count FROM users WHERE role = 'doctor' AND department = ? AND status = 'active'`,
       [department]
@@ -81,26 +83,37 @@ exports.bookAppointment = async (req, res) => {
       return res.status(400).json({ message: "Sorry, there are no active doctors currently assigned to this department." });
     }
 
-    // Count how many appointments are already booked for this specific time slot
     const [slotBookings] = await db.execute(
       `SELECT COUNT(*) as appt_count FROM appointments 
        WHERE department = ? AND appointment_date = ? AND appointment_time = ? AND status != 'cancelled'`,
       [department, appointment_date, start_time]
     );
 
-    // If appointments >= doctors, the slot is full!
     if (slotBookings[0].appt_count >= doctorCapacity) {
       return res.status(400).json({
         message: `This slot is fully booked. The department has ${doctorCapacity} doctor(s) and they are all busy at this time.`
       });
     }
 
-    // 6. Insert the appointment (Money is NOT deducted here)
+    // 6. Insert the appointment
     await db.execute(
       `INSERT INTO appointments (patient_id, department, appointment_date, appointment_time, status)
        VALUES (?,?,?,?,?)`,
       [patient_id, department, appointment_date, start_time, "pending"]
     );
+
+    // 🔥 7. SEND BOOKING CONFIRMATION EMAIL
+    try {
+      const emailMessage = `Dear ${patient.full_name},\n\nWe have successfully received your appointment request at MediCare HMS.\n\nDetails:\n- Department: ${department.toUpperCase()}\n- Date: ${appointment_date}\n- Time: ${start_time}\n- Status: Pending Confirmation\n\nPlease wait for the receptionist to confirm your appointment. You will receive further updates in your dashboard.\n\nThank you,\nMediCare HMS Support`;
+      
+      await sendEmail({
+        to: patient.email,
+        subject: `Appointment Requested - ${appointment_date}`,
+        text: emailMessage
+      });
+    } catch (emailErr) {
+      console.error("Non-fatal: Booking email failed to send", emailErr);
+    }
 
     res.status(201).json({ message: "Appointment requested successfully. Fee will be deducted upon confirmation." });
 
@@ -139,14 +152,18 @@ exports.cancelAppointment = async (req, res) => {
   try {
     const patient_id = req.user.id;
 
+    // 🔥 Modified to also fetch user details for the email
     const [rows] = await db.execute(
-      `SELECT appointment_date, appointment_time FROM appointments WHERE appointment_id=? AND patient_id=?`,
+      `SELECT a.appointment_date, a.appointment_time, a.department, u.full_name, u.email 
+       FROM appointments a
+       JOIN users u ON a.patient_id = u.user_id
+       WHERE a.appointment_id=? AND a.patient_id=?`,
       [req.params.id, patient_id]
     );
 
     if (rows.length === 0) return res.status(404).json({ message: "Appointment not found" });
 
-    const { appointment_date, appointment_time } = rows[0];
+    const { appointment_date, appointment_time, department, full_name, email } = rows[0];
     const appointmentDateTime = new Date(`${appointment_date}T${appointment_time}`);
     const now = new Date();
     const diffHours = (appointmentDateTime - now) / (1000 * 60 * 60);
@@ -159,6 +176,19 @@ exports.cancelAppointment = async (req, res) => {
       `UPDATE appointments SET status='cancelled', cancelled_by='patient' WHERE appointment_id=? AND patient_id=?`,
       [req.params.id, patient_id]
     );
+
+    // 🔥 SEND CANCELLATION EMAIL
+    try {
+      const cancelMessage = `Dear ${full_name},\n\nYour appointment at MediCare HMS has been successfully cancelled.\n\nCancelled Details:\n- Department: ${department.toUpperCase()}\n- Date: ${appointment_date}\n- Time: ${appointment_time}\n\nIf you cancelled a confirmed appointment, your wallet refund will be processed according to our hospital policy.\n\nThank you,\nMediCare HMS Support`;
+      
+      await sendEmail({
+        to: email,
+        subject: `Appointment Cancelled - ${appointment_date}`,
+        text: cancelMessage
+      });
+    } catch (emailErr) {
+      console.error("Non-fatal: Cancellation email failed to send", emailErr);
+    }
 
     res.json({ message: "Appointment cancelled successfully" });
   } catch (err) {
@@ -178,14 +208,12 @@ exports.getBookedSlots = async (req, res) => {
       return res.status(400).json({ message: "Missing params" });
     }
 
-    // 🔥 1. Check how many doctors are in the department
     const [doctorRows] = await db.execute(
       `SELECT COUNT(*) as doctor_count FROM users WHERE role = 'doctor' AND department = ? AND status = 'active'`,
       [department]
     );
     const doctorCapacity = doctorRows[0].doctor_count || 1;
 
-    // 🔥 2. Group appointments by time slot and count them
     const [rows] = await db.execute(
       `SELECT appointment_time, COUNT(*) as appt_count
        FROM appointments
@@ -194,7 +222,6 @@ exports.getBookedSlots = async (req, res) => {
       [department, date]
     );
 
-    // 🔥 3. ONLY send slots to the frontend if they have reached maximum capacity!
     const fullyBookedSlots = rows
       .filter(row => row.appt_count >= doctorCapacity)
       .map(row => ({ appointment_time: row.appointment_time }));

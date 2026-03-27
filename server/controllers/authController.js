@@ -12,7 +12,6 @@ const weakPasswordMsg = "Password is weak! It must be at least 8 characters long
 ========================= */
 exports.register = async (req, res) => {
   try {
-    // 🔥 FIXED: Added dob, gender, and address to be extracted from req.body
     const { name, email, phone, password, role, dob, gender, address } = req.body;
 
     // 🛡️ 1. Required Fields Check
@@ -59,13 +58,54 @@ exports.register = async (req, res) => {
     // Default role = patient
     const userRole = role || "patient";
 
-    // 🔥 FIXED: Added dob, gender, and address to the INSERT query
+    // Save to Database
     await db.execute(
       `INSERT INTO users 
       (full_name, email, phone, password_hash, role, status, created_by, dob, gender, address)
       VALUES (?, ?, ?, ?, ?, 'active', 'self', ?, ?, ?)`,
       [name, email, phone, hashedPassword, userRole, dob || null, gender || null, address || null]
     );
+
+    // 🔥 NEW: Send Welcome Email (Protected by Try/Catch)
+    try {
+      // Made case-insensitive just in case frontend sends "Patient"
+      if (userRole.toLowerCase().trim() === 'patient') {
+        const welcomeHtml = `
+          <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px; max-width: 600px; margin: auto;">
+            <div style="text-align: center; margin-bottom: 20px;">
+              <h2 style="color: #2563eb; margin: 0;">Welcome to MediCare HMS!</h2>
+            </div>
+            <p>Dear <b>${name}</b>,</p>
+            <p>Thank you for registering with MediCare. Your account has been successfully created!</p>
+            
+            <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #2563eb; margin: 20px 0;">
+              <h4 style="margin-top: 0; color: #1e40af;">With your new account, you can:</h4>
+              <ul style="margin-bottom: 0; padding-left: 20px;">
+                <li>Book appointments with our top doctors</li>
+                <li>View your digital lab reports and prescriptions</li>
+                <li>Manage your hospital wallet and bills</li>
+              </ul>
+            </div>
+
+            <p>You can log in to your patient portal at any time to manage your health records.</p>
+            <p>Best regards,<br><b>The MediCare Team</b></p>
+          </div>
+        `;
+
+        // 🔥 Added plain text fallback to bypass Brevo's strict spam filters
+        const fallbackText = `Dear ${name},\n\nWelcome to MediCare HMS! Your account has been successfully created.\n\nWith your new account, you can book appointments, view your digital lab reports, and manage your hospital wallet.\n\nYou can log in to your patient portal at any time to manage your health records.\n\nBest regards,\nThe MediCare Team`;
+
+        await sendEmail({
+          to: email,
+          subject: "Welcome to MediCare HMS - Account Created!",
+          html: welcomeHtml,
+          text: fallbackText
+        });
+        console.log("✅ Patient Welcome Email Sent");
+      } 
+    } catch (emailErr) {
+      console.error("🚨 Non-fatal: Welcome email failed", emailErr);
+    }
 
     res.status(201).json({
       message: `${userRole.charAt(0).toUpperCase() + userRole.slice(1)} registered successfully`
@@ -88,7 +128,6 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Email and password required" });
     }
 
-    // 🔥 NEW: Prevent database crashes from extremely long inputs
     if (email.length > 255 || password.length > 255) {
       return res.status(400).json({ message: "Invalid input length. Please try again." });
     }
@@ -114,7 +153,6 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: "Wrong password entered. Please try again." });
     }
 
-    // First time login check
     if (password === user.phone && user.role === 'patient') {
       return res.status(200).json({
         requirePasswordChange: true,
@@ -142,7 +180,6 @@ exports.login = async (req, res) => {
 
   } catch (err) {
     console.error("LOGIN ERROR:", err);
-    // 🔥 FIXED: Changed 'error' to 'message' so the frontend can read it!
     res.status(500).json({ message: "Server error during login. Please try again." });
   }
 };
@@ -159,19 +196,16 @@ exports.changePassword = async (req, res) => {
       return res.status(400).json({ message: "Please provide current and new password" });
     }
 
-    // 🔥 THE NEW CHECK: Prevent using the same password
     if (currentPassword === newPassword) {
       return res.status(400).json({
         message: "Your new password cannot be the same as your old password. Please enter a different one."
       });
     }
 
-    // 🛡️ STRONG PASSWORD VALIDATION
     if (!strongPasswordRegex.test(newPassword)) {
       return res.status(400).json({ message: weakPasswordMsg });
     }
 
-    // 1. Fetch user's current hashed password
     const [users] = await db.execute(
       "SELECT password_hash FROM users WHERE user_id = ?",
       [userId]
@@ -179,13 +213,11 @@ exports.changePassword = async (req, res) => {
 
     if (users.length === 0) return res.status(404).json({ message: "User not found" });
 
-    // 2. Verify current password
     const isMatch = await bcrypt.compare(currentPassword, users[0].password_hash);
     if (!isMatch) {
       return res.status(400).json({ message: "Incorrect current password" });
     }
 
-    // 3. Hash new password and update
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
     await db.execute(
       "UPDATE users SET password_hash = ? WHERE user_id = ?",
@@ -210,15 +242,12 @@ exports.forceChangePassword = async (req, res) => {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // 🛡️ STRONG PASSWORD VALIDATION
     if (!strongPasswordRegex.test(new_password)) {
       return res.status(400).json({ message: weakPasswordMsg });
     }
 
-    // Hash the new secure password
     const hashedPassword = await bcrypt.hash(new_password, 10);
 
-    // Update the database
     const [result] = await db.execute(
       `UPDATE users SET password_hash = ? WHERE user_id = ?`,
       [hashedPassword, user_id]
@@ -279,10 +308,8 @@ exports.forgotPassword = async (req, res) => {
     );
 
     const message = `Your password reset OTP is: ${otp}\nThis code is valid for 15 minutes.\nIf you did not request this, please ignore this email.`;
-
     const uniqueSubject = `Password Reset OTP - MediCare HMS (${new Date().toLocaleTimeString()})`;
 
-    // 🔥 ADD AWAIT HERE:
     await sendEmail({
       to: email,
       subject: uniqueSubject,
@@ -313,7 +340,6 @@ exports.verifyOtp = async (req, res) => {
       return res.status(400).json({ message: "Invalid OTP" });
     }
 
-    // Check if OTP is expired
     const user = users[0];
     if (new Date() > new Date(user.otp_expiry)) {
       return res.status(400).json({ message: "OTP has expired. Please request a new one." });
@@ -334,12 +360,10 @@ exports.resetPassword = async (req, res) => {
   try {
     const { email, otp, newPassword } = req.body;
 
-    // 🛡️ STRONG PASSWORD VALIDATION
     if (!strongPasswordRegex.test(newPassword)) {
       return res.status(400).json({ message: weakPasswordMsg });
     }
 
-    // 1. Verify OTP one last time for security
     const [users] = await db.execute(
       "SELECT * FROM users WHERE email = ? AND reset_otp = ?",
       [email, otp]
@@ -354,10 +378,8 @@ exports.resetPassword = async (req, res) => {
       return res.status(400).json({ message: "OTP has expired." });
     }
 
-    // 2. Hash new password
     const hashedNewPassword = await bcrypt.hash(newPassword, 10);
 
-    // 3. Update password and clear OTP fields
     await db.execute(
       `UPDATE users 
        SET password_hash = ?, reset_otp = NULL, otp_expiry = NULL 
