@@ -27,6 +27,13 @@ router.put(
   pharmacyController.updateMedicine
 );
 
+//delete stock
+router.delete(
+  "/medicine/:id",
+  authorizeRole("admin"),
+  pharmacyController.deleteMedicine
+);
+
 // Generate pharmacy bill
 router.post(
   "/sell",

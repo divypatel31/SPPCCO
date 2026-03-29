@@ -168,75 +168,122 @@ exports.myAppointments = async (req, res) => {
 };
 
 /* ============================
-   CANCEL APPOINTMENT
+   CANCEL APPOINTMENT (SMART REFUND LOGIC)
 ============================ */
 exports.cancelAppointment = async (req, res) => {
   try {
-    const patient_id = req.user.id;
+    const user_id = req.user.id;
+    const user_role = req.user.role; // 'patient', 'doctor', 'receptionist', etc.
+    const appointment_id = req.params.id;
 
-    // 🔥 Updated to join with users table to get patient email and name
+    // 1. Fetch the appointment and patient details
     const [rows] = await db.execute(
-      `SELECT a.appointment_date, a.appointment_time, a.department, u.email, u.full_name 
+      `SELECT a.appointment_date, a.appointment_time, a.department, a.status, a.patient_id, 
+              u.email, u.full_name, u.wallet_balance 
        FROM appointments a
        JOIN users u ON a.patient_id = u.user_id
-       WHERE a.appointment_id=? AND a.patient_id=?`,
-      [req.params.id, patient_id]
+       WHERE a.appointment_id = ?`,
+      [appointment_id]
     );
 
     if (rows.length === 0) return res.status(404).json({ message: "Appointment not found" });
 
-    const { appointment_date, appointment_time, department, email, full_name } = rows[0];
-    const appointmentDateTime = new Date(`${appointment_date}T${appointment_time}`);
-    const now = new Date();
-    const diffHours = (appointmentDateTime - now) / (1000 * 60 * 60);
+    const appt = rows[0];
 
-    if (diffHours < 1) {
-      return res.status(400).json({ message: "Cannot cancel within 1 hour of appointment time" });
+    // 2. Prevent cancelling an already cancelled appointment
+    if (appt.status === 'cancelled') {
+      return res.status(400).json({ message: "This appointment is already cancelled." });
     }
 
+    // 3. Patient-Specific Rule: 1 Hour Window & Ownership check
+    if (user_role === 'patient') {
+      if (appt.patient_id !== user_id) {
+        return res.status(403).json({ message: "Unauthorized to cancel this appointment" });
+      }
+      
+      const appointmentDateTime = new Date(`${appt.appointment_date}T${appt.appointment_time}`);
+      const now = new Date();
+      const diffHours = (appointmentDateTime - now) / (1000 * 60 * 60);
+
+      if (diffHours < 1) {
+        return res.status(400).json({ message: "Cannot cancel within 1 hour of appointment time." });
+      }
+    }
+
+    // 4. 🔥 SMART REFUND LOGIC 🔥
+    let refundIssued = false;
+    const consultationFee = 100; // The standard fee we deduct
+
+    // ONLY refund if the appointment was 'confirmed' or 'arrived' (meaning money was already cut)
+    // If it is 'pending', the receptionist hasn't booked it yet, so NO money was cut.
+    if (appt.status === 'confirmed' || appt.status === 'arrived') {
+      await db.execute(
+        `UPDATE users SET wallet_balance = wallet_balance + ? WHERE user_id = ?`,
+        [consultationFee, appt.patient_id]
+      );
+      refundIssued = true;
+      console.log(`[REFUND] ₹${consultationFee} refunded to patient ${appt.patient_id}`);
+    }
+
+    // 5. Update the Appointment Status in the Database
     await db.execute(
-      `UPDATE appointments SET status='cancelled', cancelled_by='patient' WHERE appointment_id=? AND patient_id=?`,
-      [req.params.id, patient_id]
+      `UPDATE appointments SET status='cancelled', cancelled_by=? WHERE appointment_id=?`,
+      [user_role, appointment_id]
     );
 
-    // 🔥 SEND HTML EMAIL NOTIFICATION FOR PATIENT CANCELLATION
+    // 6. 🔥 SEND DYNAMIC HTML EMAIL NOTIFICATION
     try {
+      // Create a dynamic refund message for the email
+      const refundMessageHtml = refundIssued 
+        ? `<div style="background-color: #ecfdf5; padding: 12px; border-radius: 8px; border-left: 4px solid #10b981; margin-top: 15px;">
+             <p style="margin: 0; color: #065f46; font-size: 14px;"><b>💰 Refund Processed:</b> ₹${consultationFee} has been successfully refunded to your hospital wallet.</p>
+           </div>`
+        : `<div style="background-color: #f8fafc; padding: 12px; border-radius: 8px; border-left: 4px solid #64748b; margin-top: 15px;">
+             <p style="margin: 0; color: #475569; font-size: 14px;"><b>Note:</b> Because this request was still pending, no fee had been deducted from your wallet.</p>
+           </div>`;
+
       const cancelHtml = `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; border: 1px solid #fee2e2; border-radius: 10px; max-width: 600px; margin: auto;">
           <div style="text-align: center; margin-bottom: 20px;">
             <h2 style="color: #dc2626; margin: 0;">Appointment Cancelled</h2>
           </div>
-          <p>Dear <b>${full_name}</b>,</p>
-          <p>Your appointment has been successfully cancelled as per your request.</p>
+          <p>Dear <b>${appt.full_name}</b>,</p>
+          <p>This email is to confirm that your scheduled appointment has been cancelled by the ${user_role}.</p>
           
           <div style="background-color: #fef2f2; padding: 15px; border-radius: 8px; border-left: 4px solid #dc2626; margin: 20px 0;">
-            <p style="margin: 5px 0;"><b>Department:</b> <span style="text-transform: capitalize;">${department}</span></p>
-            <p style="margin: 5px 0;"><b>Date:</b> ${new Date(appointment_date).toDateString()}</p>
-            <p style="margin: 5px 0;"><b>Time:</b> ${appointment_time.slice(0, 5)}</p>
+            <p style="margin: 5px 0;"><b>Department:</b> <span style="text-transform: capitalize;">${appt.department}</span></p>
+            <p style="margin: 5px 0;"><b>Date:</b> ${new Date(appt.appointment_date).toDateString()}</p>
+            <p style="margin: 5px 0;"><b>Time:</b> ${appt.appointment_time.slice(0, 5)}</p>
           </div>
 
-          <p>If you cancelled an already-confirmed appointment, any applicable wallet refunds will be processed according to hospital policy.</p>
+          ${refundMessageHtml}
+
+          <p style="margin-top: 20px;">If you would like to reschedule, please visit your patient portal.</p>
           <p>Best regards,<br><b>MediCare HMS Team</b></p>
         </div>
       `;
 
-      const fallbackText = `Dear ${full_name},\n\nYour appointment for ${department} on ${appointment_date} at ${appointment_time} has been successfully cancelled.\n\nBest regards,\nMediCare HMS Team`;
+      const fallbackText = `Dear ${appt.full_name},\n\nYour appointment for ${appt.department} on ${appt.appointment_date} has been cancelled.\n${refundIssued ? '₹100 has been refunded to your wallet.' : 'No fee was deducted.'}\n\nBest regards,\nMediCare HMS Team`;
 
       await sendEmail({
-        to: email,
-        subject: "Appointment Cancelled - MediCare HMS",
+        to: appt.email,
+        subject: "Appointment Cancellation Update - MediCare HMS",
         html: cancelHtml,
         text: fallbackText
       });
-      console.log("✅ Patient Cancellation Email Sent to Brevo!");
+      console.log("✅ Patient Cancellation & Refund Email Sent!");
     } catch (emailErr) {
       console.error("🚨 Non-fatal: Cancellation email failed", emailErr);
     }
 
-    res.json({ message: "Appointment cancelled successfully" });
+    res.json({ 
+      message: "Appointment cancelled successfully.",
+      refunded: refundIssued 
+    });
+
   } catch (err) {
     console.error("CANCEL ERROR:", err);
-    res.status(500).json({ message: "Cancel failed" });
+    res.status(500).json({ message: "Server error while cancelling appointment." });
   }
 };
 

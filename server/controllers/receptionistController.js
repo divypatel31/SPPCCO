@@ -327,7 +327,7 @@ exports.markBillPaid = async (req, res) => {
 };
 
 /* ==============================
-   7️⃣ REGISTER WALK-IN PATIENT
+   REGISTER WALK-IN PATIENT
 ================================= */
 exports.registerWalkInPatient = async (req, res) => {
   try {
@@ -354,7 +354,41 @@ exports.registerWalkInPatient = async (req, res) => {
       [name, email, phone, hashedPassword, dob, gender, address || null]
     );
 
-    // 🔥 Sending clear message so Receptionist can inform patient
+    // 🔥 SEND WELCOME EMAIL (With Spam Filter Bypass)
+    try {
+      const welcomeHtml = `
+        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px; max-width: 600px; margin: auto;">
+          <div style="text-align: center; margin-bottom: 20px;">
+            <h2 style="color: #2563eb; margin: 0;">Welcome to MediCare HMS!</h2>
+          </div>
+          <p>Dear <b>${name}</b>,</p>
+          <p>You have been successfully registered at our hospital reception desk.</p>
+          
+          <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #2563eb; margin: 20px 0;">
+            <p style="margin: 0 0 10px 0;"><b>Your Patient Portal Login:</b></p>
+            <p style="margin: 5px 0;"><b>Email:</b> ${email}</p>
+            <p style="margin: 5px 0;"><b>Temporary Password:</b> ${phone}</p>
+          </div>
+
+          <p style="color: #b91c1c; font-size: 14px;"><b>⚠️ Security Notice:</b> Please log in to your patient portal and change your password immediately.</p>
+          <p>Best regards,<br><b>The MediCare Team</b></p>
+        </div>
+      `;
+
+      // 🔥 The crucial fallback text that guarantees Brevo accepts the email
+      const fallbackText = `Dear ${name},\n\nYou have been successfully registered at our hospital reception desk.\n\nYour Patient Portal Login:\nEmail: ${email}\nTemporary Password: ${phone}\n\nPlease log in and change your password immediately.\n\nBest regards,\nThe MediCare Team`;
+
+      await sendEmail({
+        to: email,
+        subject: "Welcome to MediCare HMS - Hospital Registration",
+        html: welcomeHtml,
+        text: fallbackText
+      });
+      console.log("✅ Walk-in Patient Welcome Email Sent");
+    } catch (emailErr) {
+      console.error("🚨 Non-fatal: Walk-in Welcome email failed", emailErr);
+    }
+
     res.status(201).json({
       message: "Patient registered! Ask them to login using their phone number as the password.",
       user_id: result.insertId,

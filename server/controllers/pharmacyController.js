@@ -459,3 +459,35 @@ exports.getBillDetails = async (req, res) => {
     res.status(500).json({ message: "Failed to load bill items" });
   }
 };
+
+/* ==========================================
+   DELETE MEDICINE
+========================================== */
+exports.deleteMedicine = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [result] = await db.execute(
+      "DELETE FROM medicines WHERE medicine_id = ?",
+      [id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Medicine not found" });
+    }
+
+    res.json({ message: "Medicine deleted successfully" });
+
+  } catch (error) {
+    console.error("DELETE MEDICINE ERROR:", error);
+    
+    // 🛡️ SAFETY CHECK: If the medicine is linked to an old bill or prescription, SQL blocks it.
+    if (error.code === 'ER_ROW_IS_REFERENCED_2' || error.code === 'ER_ROW_IS_REFERENCED') {
+      return res.status(400).json({ 
+        message: "Cannot delete! This medicine has already been prescribed to patients or sold in bills. Please update its stock to 0 instead." 
+      });
+    }
+    
+    res.status(500).json({ error: error.message });
+  }
+};

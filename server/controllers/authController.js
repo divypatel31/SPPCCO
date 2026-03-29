@@ -299,6 +299,7 @@ exports.forgotPassword = async (req, res) => {
       return res.status(404).json({ message: "No account found with this email" });
     }
 
+    const user = users[0]; // Get the user object to use their name
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const expiry = new Date(Date.now() + 15 * 60 * 1000);
 
@@ -307,13 +308,39 @@ exports.forgotPassword = async (req, res) => {
       [otp, expiry, email]
     );
 
-    const message = `Your password reset OTP is: ${otp}\nThis code is valid for 15 minutes.\nIf you did not request this, please ignore this email.`;
-    const uniqueSubject = `Password Reset OTP - MediCare HMS (${new Date().toLocaleTimeString()})`;
+    // 🔥 BEAUTIFUL HTML OTP TEMPLATE
+    const otpHtml = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; padding: 20px; border: 1px solid #e2e8f0; border-radius: 10px; max-width: 600px; margin: auto; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="color: #2563eb; margin: 0;">Password Reset Request</h2>
+        </div>
+        <p>Dear <b>${user.full_name}</b>,</p>
+        <p>We received a request to reset your password for your MediCare HMS account.</p>
+        
+        <div style="background-color: #f8fafc; padding: 25px; border-radius: 12px; border: 1px dashed #94a3b8; text-align: center; margin: 25px 0;">
+          <p style="margin: 0 0 10px 0; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 1.5px;">Your One-Time Password</p>
+          <div style="font-size: 36px; font-weight: 800; color: #1e40af; letter-spacing: 8px;">${otp}</div>
+        </div>
+
+        <p style="color: #b91c1c; font-size: 14px;"><b>⚠️ Security Notice:</b> This code is only valid for <b>15 minutes</b>. Do not share this code with anyone, including hospital staff.</p>
+        <p style="font-size: 14px; color: #475569;">If you did not request a password reset, you can safely ignore this email. Your account is still secure.</p>
+        
+        <div style="margin-top: 30px; pt-4; border-top: 1px solid #e2e8f0; text-align: center;">
+          <p style="color: #64748b; font-size: 12px;">Best regards,<br><b>MediCare IT Administration</b></p>
+        </div>
+      </div>
+    `;
+
+    // 🔥 PLAIN TEXT FALLBACK (To bypass Brevo Spam Filters)
+    const fallbackText = `Dear ${user.full_name},\n\nYour password reset OTP is: ${otp}\n\nThis code is valid for 15 minutes. Do not share this code with anyone.\n\nIf you did not request this, please ignore this email.\n\nBest regards,\nMediCare IT Administration`;
+    
+    const uniqueSubject = `Action Required: Password Reset OTP - MediCare HMS`;
 
     await sendEmail({
       to: email,
       subject: uniqueSubject,
-      text: message
+      html: otpHtml,
+      text: fallbackText
     });
 
     res.json({ message: "OTP sent to email successfully" });

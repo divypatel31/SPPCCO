@@ -229,8 +229,9 @@ export default function Prescriptions() {
                   </span>
                 </div>
 
-                <div className="border border-slate-200/60 rounded-[16px] overflow-hidden shadow-sm mb-6">
-                  <table className="w-full text-left text-sm">
+                {/* 🔥 FIX: Added 'overflow-x-auto' wrapper and 'min-w-[700px]' to prevent modal stretching on small laptops */}
+                <div className="border border-slate-200/60 rounded-[16px] shadow-sm mb-6 w-full overflow-x-auto hide-scrollbar">
+                  <table className="w-full text-left text-sm min-w-[700px]">
                     <thead className="bg-slate-50 border-b border-slate-200/60 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
                       <tr>
                         <th className="px-4 py-3">Medicine</th>

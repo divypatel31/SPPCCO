@@ -136,9 +136,20 @@ export default function ConsultationPage() {
   const completeConsultation = async () => {
     if (!window.confirm('Mark consultation as complete?')) return;
 
+    const finalMedicines = medicines.filter(med => med.medicine_id !== '');
+    
+    // 🔥 STRICT VALIDATION: Check if any dose or duration is 0 or missing
+    for (const med of finalMedicines) {
+      if (!med.dose || Number(med.dose) <= 0) {
+        return toast.error('Dose must be strictly greater than zero.');
+      }
+      if (!med.duration || Number(med.duration) <= 0) {
+        return toast.error('Duration must be strictly greater than zero.');
+      }
+    }
+
     setSaving(true);
     try {
-      const finalMedicines = medicines.filter(med => med.medicine_id !== '');
       const formattedMedicines = finalMedicines.map(med => ({
         ...med,
         morning: med.morning ? 1 : 0, afternoon: med.afternoon ? 1 : 0,
@@ -188,7 +199,7 @@ export default function ConsultationPage() {
       
       doc.setFontSize(22);
       doc.setTextColor(231, 76, 60);
-      doc.text("MediCare Pathology Lab", 105, 20, { align: "center" });
+      doc.text("MediCare Lab Report", 105, 20, { align: "center" });
 
       doc.setFontSize(12);
       doc.setTextColor(50, 50, 50);
@@ -197,7 +208,6 @@ export default function ConsultationPage() {
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
       doc.text(`Patient: ${appt.patient_name}`, 14, 45);
-      doc.text(`Doctor: Dr. ${pastDoctorName || appt.doctor_name || 'Assigned'}`, 14, 52);
       doc.text(`Date: ${formatDate(new Date())}`, 130, 45);
 
       const tableColumn = ["Test Name", "Result / Findings"];
@@ -444,9 +454,23 @@ export default function ConsultationPage() {
                         </select>
                       </div>
 
+                      {/* 🔥 FIXED DOSE INPUT: Blocks typing negatives, enforces min="0.5" */}
                       <div className="col-span-6 md:col-span-2">
                         <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5 block">Dose</label>
-                        <input type="number" step="0.5" className="w-full p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-500/10" disabled={isCompleted} value={med.dose} onChange={e => updateMedicine(i, 'dose', e.target.value)} />
+                        <input 
+                          type="number" 
+                          step="0.5" 
+                          min="0.5"
+                          className="w-full p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-500/10" 
+                          disabled={isCompleted} 
+                          value={med.dose} 
+                          onKeyDown={(e) => ['-', 'e', 'E', '+'].includes(e.key) && e.preventDefault()}
+                          onChange={e => {
+                            let val = e.target.value;
+                            if (Number(val) < 0) val = Math.abs(val);
+                            updateMedicine(i, 'dose', val);
+                          }} 
+                        />
                       </div>
 
                       <div className="col-span-6 md:col-span-2">
@@ -456,9 +480,23 @@ export default function ConsultationPage() {
                         </select>
                       </div>
 
+                      {/* 🔥 FIXED DURATION INPUT: Blocks decimals and negatives, enforces min="1" */}
                       <div className="col-span-12 md:col-span-3">
                         <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5 block">Duration (Days)</label>
-                        <input type="number" className="w-full p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-500/10" disabled={isCompleted} value={med.duration} onChange={e => updateMedicine(i, 'duration', e.target.value)} placeholder="e.g. 5" />
+                        <input 
+                          type="number" 
+                          min="1"
+                          className="w-full p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-500/10" 
+                          disabled={isCompleted} 
+                          value={med.duration} 
+                          onKeyDown={(e) => ['-', 'e', 'E', '+', '.'].includes(e.key) && e.preventDefault()}
+                          onChange={e => {
+                            let val = e.target.value;
+                            if (Number(val) < 0) val = Math.abs(val);
+                            updateMedicine(i, 'duration', val);
+                          }} 
+                          placeholder="e.g. 5" 
+                        />
                       </div>
                     </div>
 

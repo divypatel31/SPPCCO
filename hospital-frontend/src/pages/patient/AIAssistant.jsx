@@ -41,15 +41,16 @@ export default function AIAssistant() {
   };
 
   return (
-    <motion.div initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.1 } } }} className="flex flex-col h-[calc(100vh-120px)] max-h-[900px] max-w-[1000px] mx-auto p-4 sm:p-8 font-sans">
+    // 🔥 Changed max-w-[1000px] to max-w-[900px] and adjusted height for a perfect medium view
+    <motion.div initial="hidden" animate="visible" variants={{ visible: { transition: { staggerChildren: 0.1 } } }} className="flex flex-col h-[calc(100vh-90px)] min-h-[600px] max-w-[900px] mx-auto p-4 sm:p-6 font-sans">
       
-      <motion.div variants={FADE_UP_SPRING} className="mb-6">
+      <motion.div variants={FADE_UP_SPRING} className="mb-4">
         <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Health Assistant AI</h1>
         <p className="text-slate-500 font-medium mt-1">Chat intelligently to triage symptoms and auto-book consultations.</p>
       </motion.div>
 
       {/* Disclaimers */}
-      <motion.div variants={FADE_UP_SPRING} className="grid sm:grid-cols-2 gap-4 mb-6">
+      <motion.div variants={FADE_UP_SPRING} className="grid sm:grid-cols-2 gap-4 mb-4">
         <div className="bg-amber-50/50 border border-amber-200/60 p-4 rounded-2xl flex gap-3 shadow-sm">
           <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={18} />
           <div>
@@ -67,7 +68,7 @@ export default function AIAssistant() {
       </motion.div>
 
       {/* Chat Container */}
-      <motion.div variants={FADE_UP_SPRING} className="flex-1 bg-white rounded-[24px] shadow-[0_2px_10px_-4px_rgba(0,0,0,0.02)] border border-slate-200/60 flex flex-col overflow-hidden">
+      <motion.div variants={FADE_UP_SPRING} className="flex-1 bg-white rounded-[24px] shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-200/60 flex flex-col overflow-hidden">
         
         {/* Chat Header */}
         <div className="bg-slate-50/80 p-5 flex items-center gap-3 border-b border-slate-100">
@@ -87,13 +88,14 @@ export default function AIAssistant() {
           {messages.map((msg, idx) => (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={idx} className={`flex gap-3 max-w-[85%] ${msg.sender === 'user' ? 'ml-auto flex-row-reverse' : ''}`}>
               
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 shadow-sm ${msg.sender === 'user' ? 'bg-sky-500 text-white' : 'bg-white text-sky-600 border border-slate-200/60'}`}>
-                {msg.sender === 'user' ? <User size={14} /> : <Bot size={16} />}
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-1 shadow-sm ${msg.sender === 'user' ? 'bg-sky-500 text-white' : 'bg-white text-sky-600 border border-slate-200/60'}`}>
+                {msg.sender === 'user' ? <User size={16} /> : <Bot size={18} />}
               </div>
               
-              <div className={`p-4 text-[13px] font-medium leading-relaxed shadow-sm ${msg.sender === 'user' ? 'bg-sky-500 text-white rounded-2xl rounded-tr-sm' : 'bg-white border border-slate-200/60 text-slate-700 rounded-2xl rounded-tl-sm'}`}>
+              {/* 🔥 Changed text size to 15px and markdown to prose-base */}
+              <div className={`p-4 text-[15px] font-medium leading-relaxed shadow-sm ${msg.sender === 'user' ? 'bg-sky-500 text-white rounded-2xl rounded-tr-sm' : 'bg-white border border-slate-200/60 text-slate-700 rounded-2xl rounded-tl-sm'}`}>
                 {msg.sender === 'user' ? msg.text : (
-                  <div className="prose prose-sm prose-sky max-w-none prose-p:my-1 prose-headings:mb-2 prose-headings:mt-4">
+                  <div className="prose prose-base prose-sky max-w-none prose-p:my-1 prose-headings:mb-2 prose-headings:mt-4">
                     <ReactMarkdown>{msg.text}</ReactMarkdown>
                   </div>
                 )}
@@ -103,11 +105,11 @@ export default function AIAssistant() {
           
           {loading && (
             <div className="flex gap-3 max-w-[85%]">
-              <div className="w-8 h-8 rounded-full bg-white text-sky-600 border border-slate-200/60 shadow-sm flex items-center justify-center shrink-0 mt-1"><Bot size={16} /></div>
+              <div className="w-9 h-9 rounded-full bg-white text-sky-600 border border-slate-200/60 shadow-sm flex items-center justify-center shrink-0 mt-1"><Bot size={18} /></div>
               <div className="bg-white border border-slate-200/60 p-4 rounded-2xl rounded-tl-sm shadow-sm flex gap-1.5 items-center">
-                <div className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce" />
-                <div className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
-                <div className="w-1.5 h-1.5 bg-sky-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+                <div className="w-2 h-2 bg-sky-400 rounded-full animate-bounce" />
+                <div className="w-2 h-2 bg-sky-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+                <div className="w-2 h-2 bg-sky-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
               </div>
             </div>
           )}
@@ -118,7 +120,7 @@ export default function AIAssistant() {
         <form onSubmit={sendMessage} className="p-4 bg-white border-t border-slate-100 flex gap-3">
           <input
             type="text"
-            className="flex-1 border border-slate-200/60 rounded-[16px] px-5 py-3.5 text-sm font-medium text-slate-900 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-500/10 transition-all bg-slate-50 hover:bg-white placeholder:text-slate-400"
+            className="flex-1 border border-slate-200/60 rounded-[16px] px-5 py-4 text-[15px] font-medium text-slate-900 focus:outline-none focus:border-sky-400 focus:ring-4 focus:ring-sky-500/10 transition-all bg-slate-50 hover:bg-white placeholder:text-slate-400"
             placeholder="Describe your symptoms to initiate booking..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -127,9 +129,9 @@ export default function AIAssistant() {
           <button
             type="submit"
             disabled={loading || !input.trim()}
-            className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-3.5 rounded-[16px] shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed flex items-center justify-center transition-all"
+            className="bg-slate-900 hover:bg-slate-800 text-white px-6 py-4 rounded-[16px] shadow-md disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed flex items-center justify-center transition-all"
           >
-            <Send size={18} className={input.trim() && !loading ? "translate-x-0.5 transition-transform" : ""} />
+            <Send size={20} className={input.trim() && !loading ? "translate-x-0.5 transition-transform" : ""} />
           </button>
         </form>
 
