@@ -36,32 +36,36 @@ export default function Prescriptions() {
     }
   };
 
-  // 🔥 FETCH TOTAL INVENTORY & SMART FIFO PRICE
+  // 🔥 FETCH TOTAL INVENTORY & MAP ALL BATCHES FOR SMART PRICING
   const fetchInventory = async () => {
     try {
       const res = await api.get('/pharmacy/medicine');
       const groupedMap = new Map();
       
-      // Sort to find the oldest expiring batch first (just like the backend)
+      // Sort to find the oldest expiring batch first (Exactly mimicking the backend ISNULL logic)
       const sortedMeds = [...(res.data || [])].sort((a, b) => {
-        const dateA = a.expiry_date ? new Date(a.expiry_date) : new Date('9999-12-31');
-        const dateB = b.expiry_date ? new Date(b.expiry_date) : new Date('9999-12-31');
-        return dateA - dateB;
+        const aHasExpiry = !!a.expiry_date;
+        const bHasExpiry = !!b.expiry_date;
+        if (aHasExpiry && !bHasExpiry) return -1;
+        if (!aHasExpiry && bHasExpiry) return 1;
+        if (!aHasExpiry && !bHasExpiry) return 0;
+        return new Date(a.expiry_date) - new Date(b.expiry_date);
       });
 
       sortedMeds.forEach(med => {
         const nameKey = (med.name || '').trim().toLowerCase();
         
         if (!groupedMap.has(nameKey)) {
-          groupedMap.set(nameKey, { totalStock: 0, activePrice: 0 });
+          groupedMap.set(nameKey, { totalStock: 0, activePrice: 0, batches: [] });
         }
         
         const current = groupedMap.get(nameKey);
         current.totalStock += Number(med.stock);
         
-        // Grab the price of the FIRST batch that actually has stock!
-        if (Number(med.stock) > 0 && current.activePrice === 0) {
-           current.activePrice = Number(med.price);
+        if (Number(med.stock) > 0) {
+           // Store the batch so the frontend can calculate exact FIFO pricing!
+           current.batches.push({ stock: Number(med.stock), price: Number(med.price) });
+           if (current.activePrice === 0) current.activePrice = Number(med.price);
         }
       });
       
@@ -75,6 +79,42 @@ export default function Prescriptions() {
     fetchPrescriptions(); 
     fetchInventory(); 
   }, []);
+
+  // 🔥 THE MAGIC: Frontend FIFO Calculator
+  const getFIFODetails = (medName, qty) => {
+    const nameKey = (medName || '').trim().toLowerCase();
+    const invData = inventory.get(nameKey);
+    
+    if (!invData || !invData.batches || invData.batches.length === 0) {
+      return { totalCost: 0, isMixed: false, basePrice: 0 };
+    }
+
+    let remainingQty = Number(qty);
+    let totalCost = 0;
+    const pricesUsed = new Set();
+
+    // Loop through batches just like the backend does to calculate the true cost
+    for (let batch of invData.batches) {
+      if (remainingQty <= 0) break;
+      const take = Math.min(remainingQty, batch.stock);
+      if (take > 0) {
+        totalCost += take * batch.price;
+        pricesUsed.add(batch.price);
+        remainingQty -= take;
+      }
+    }
+
+    // Fallback if they try to order more than exists
+    if (remainingQty > 0) {
+      totalCost += remainingQty * invData.activePrice;
+    }
+
+    return {
+      totalCost,
+      isMixed: pricesUsed.size > 1, // TRUE if the quantity spans multiple price batches
+      basePrice: invData.activePrice
+    };
+  };
 
   const handleCancel = async (id) => {
     if (!window.confirm("Cancel this prescription? Use this only if the patient hasn't shown up to collect their medicines.")) return;
@@ -114,17 +154,12 @@ export default function Prescriptions() {
       const items = res.data.map(m => {
         const nameKey = (m.medicine_name || '').trim().toLowerCase();
         const invData = inventory.get(nameKey);
-        
         const totalStock = invData ? invData.totalStock : Number(m.stock);
-        
-        // 🔥 Override old price with the CURRENT active batch price so totals match exactly!
-        const activePrice = (invData && invData.activePrice > 0) ? invData.activePrice : Number(m.unit_price);
 
         return {
           ...m,
           stock: totalStock, 
-          qty_dispensed: calculateDispensingQty(m), 
-          unit_price: activePrice,
+          qty_dispensed: calculateDispensingQty(m)
         };
       });
 
@@ -134,9 +169,10 @@ export default function Prescriptions() {
     }
   };
 
-  // 🔥 Strictly convert to Numbers to prevent any weird Javascript Math bugs
+  // Calculate true frontend total using the FIFO Helper
   const total = dispenseData.reduce((sum, m) => {
-    return sum + (Number(m.qty_dispensed || 0) * Number(m.unit_price || 0));
+    const fifo = getFIFODetails(m.medicine_name || m.name, m.qty_dispensed);
+    return sum + fifo.totalCost;
   }, 0);
 
   const handleGenerateBill = async (e) => {
@@ -150,10 +186,8 @@ export default function Prescriptions() {
         patient_id: selected.patient_id,
         medicines: dispenseData.map(m => ({
           medicine_id: m.medicine_id,
-          quantity_dispensed: Number(m.qty_dispensed),
-          unit_price: Number(m.unit_price),
-        })),
-        total_amount: total,
+          quantity_dispensed: Number(m.qty_dispensed)
+        }))
       });
 
       toast.success('Pharmacy bill generated!');
@@ -296,67 +330,78 @@ export default function Prescriptions() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {dispenseData.map((med, i) => (
-                        <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-4 py-3">
-                            <p className="font-semibold text-slate-900">{med.medicine_name || med.name}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[9px] bg-slate-100 border border-slate-200/60 px-1.5 py-0.5 rounded-md text-slate-600 font-semibold uppercase tracking-widest">{med.form || 'Tab'}</span>
-                              {med.dispense_type === 'PACK' && (
-                                <span className="text-[9px] text-indigo-600 bg-indigo-50 border border-indigo-100/60 px-1.5 py-0.5 rounded-md flex items-center gap-1 font-semibold uppercase tracking-widest">
-                                  <Package size={10} /> {med.pack_size}{med.unit}/pack
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          
-                          <td className="px-4 py-3 text-xs font-medium text-slate-600">
-                            <p>{med.dose}{med.unit} × {med.frequency}/day</p>
-                            <p className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-400">{med.duration} days</p>
-                          </td>
+                      {dispenseData.map((med, i) => {
+                        // 🔥 Get exact FIFO price for this specific row!
+                        const fifo = getFIFODetails(med.medicine_name || med.name, med.qty_dispensed);
 
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number" min="0" max={med.stock}
-                                className={`w-20 border rounded-lg px-3 py-1.5 text-sm font-semibold outline-none transition-all ${
-                                  med.stock < med.qty_dispensed ? 'border-rose-400 focus:ring-rose-500 text-rose-700 bg-rose-50' : 'border-slate-200/60 bg-white focus:ring-emerald-500 text-slate-900'
-                                }`}
-                                value={med.qty_dispensed}
-                                onChange={e => {
-                                  const updated = [...dispenseData];
-                                  updated[i].qty_dispensed = Number(e.target.value) || 0;
-                                  setDispenseData(updated);
-                                }}
-                              />
-                              <span className="text-[11px] text-slate-500 font-medium uppercase tracking-widest">
-                                {getDisplayUnit(med)}
-                              </span>
-                            </div>
+                        return (
+                          <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-4 py-3">
+                              <p className="font-semibold text-slate-900">{med.medicine_name || med.name}</p>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[9px] bg-slate-100 border border-slate-200/60 px-1.5 py-0.5 rounded-md text-slate-600 font-semibold uppercase tracking-widest">{med.form || 'Tab'}</span>
+                                {med.dispense_type === 'PACK' && (
+                                  <span className="text-[9px] text-indigo-600 bg-indigo-50 border border-indigo-100/60 px-1.5 py-0.5 rounded-md flex items-center gap-1 font-semibold uppercase tracking-widest">
+                                    <Package size={10} /> {med.pack_size}{med.unit}/pack
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             
-                            <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 flex items-center gap-1 ${med.stock < med.qty_dispensed ? 'text-rose-500' : 'text-slate-400'}`}>
-                              {med.stock === 0 && <AlertCircle size={10} />}
-                              Total In Stock: {med.stock || 0}
-                            </p>
-                          </td>
+                            <td className="px-4 py-3 text-xs font-medium text-slate-600">
+                              <p>{med.dose}{med.unit} × {med.frequency}/day</p>
+                              <p className="mt-0.5 text-[10px] uppercase tracking-widest text-slate-400">{med.duration} days</p>
+                            </td>
 
-                          <td className="px-4 py-3">
-                            <div className="relative w-24">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">₹</span>
-                              <input
-                                type="number"
-                                className="w-full bg-slate-50 border border-slate-200/60 text-slate-600 rounded-lg pl-7 pr-3 py-1.5 text-sm font-semibold outline-none cursor-not-allowed"
-                                value={med.unit_price}
-                                readOnly
-                              />
-                            </div>
-                          </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number" min="0" max={med.stock}
+                                  className={`w-20 border rounded-lg px-3 py-1.5 text-sm font-semibold outline-none transition-all ${
+                                    med.stock < med.qty_dispensed ? 'border-rose-400 focus:ring-rose-500 text-rose-700 bg-rose-50' : 'border-slate-200/60 bg-white focus:ring-emerald-500 text-slate-900'
+                                  }`}
+                                  value={med.qty_dispensed}
+                                  onChange={e => {
+                                    const updated = [...dispenseData];
+                                    updated[i].qty_dispensed = Number(e.target.value) || 0;
+                                    setDispenseData(updated);
+                                  }}
+                                />
+                                <span className="text-[11px] text-slate-500 font-medium uppercase tracking-widest">
+                                  {getDisplayUnit(med)}
+                                </span>
+                              </div>
+                              
+                              <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 flex items-center gap-1 ${med.stock < med.qty_dispensed ? 'text-rose-500' : 'text-slate-400'}`}>
+                                {med.stock === 0 && <AlertCircle size={10} />}
+                                Total In Stock: {med.stock || 0}
+                              </p>
+                            </td>
 
-                          <td className="px-4 py-3 font-bold text-emerald-700 text-right">
-                            {formatCurrency(Number(med.qty_dispensed || 0) * Number(med.unit_price || 0))}
-                          </td>
-                        </tr>
-                      ))}
+                            <td className="px-4 py-3">
+                              <div className="relative w-28">
+                                {!fifo.isMixed && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">₹</span>}
+                                <input
+                                  type="text"
+                                  className={`w-full bg-slate-50 border border-slate-200/60 text-slate-600 rounded-lg pr-3 py-1.5 text-sm font-semibold outline-none cursor-not-allowed ${fifo.isMixed ? 'px-3 text-[11px] text-center bg-amber-50 border-amber-200' : 'pl-7'}`}
+                                  value={fifo.isMixed ? "MIXED FIFO" : fifo.basePrice}
+                                  readOnly
+                                />
+                              </div>
+                              {/* Warning text if the required qty pulls from batches with different prices */}
+                              {fifo.isMixed && (
+                                <p className="text-[9px] font-bold text-amber-600 uppercase tracking-widest mt-1.5">
+                                  Spans Multi-Batches
+                                </p>
+                              )}
+                            </td>
+
+                            <td className="px-4 py-3 font-bold text-emerald-700 text-right">
+                              {formatCurrency(fifo.totalCost)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
