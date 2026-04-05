@@ -146,7 +146,7 @@ exports.updateMedicine = async (req, res) => {
 };
 
 /* ========================================================
-   🔥 SELL MEDICINES (SMART FIFO BATCH MANAGEMENT) 🔥
+   🔥 SELL MEDICINES (SMART FIFO, NO SCHEMA CHANGES) 🔥
 ======================================================== */
 exports.sellMedicines = async (req, res) => {
   const { prescription_id, medicines } = req.body;
@@ -243,7 +243,7 @@ exports.sellMedicines = async (req, res) => {
       [finalTotal, patient_id]
     );
 
-    // 5️⃣ Create the bill
+    // 5️⃣ Create the bill (This automatically hides the prescription from the pending queue!)
     const [billResult] = await conn.execute(`
       INSERT INTO bills 
       (appointment_id, patient_id, bill_type, generated_by, total_amount, payment_status, paid_at)
@@ -263,12 +263,6 @@ exports.sellMedicines = async (req, res) => {
         UPDATE medicines SET stock = stock - ? WHERE medicine_id = ?
       `, [item.dispenseQty, item.medicine_id]);
     }
-
-    // 7️⃣ Update the Prescription Status so it clears from the Queue
-    await conn.execute(
-      "UPDATE prescriptions SET dispensing_status = 'dispensed' WHERE prescription_id = ?",
-      [prescription_id]
-    );
 
     await conn.commit();
 
@@ -326,6 +320,9 @@ exports.getTopSellingMedicines = async (req, res) => {
   }
 };
 
+/* ========================================================
+   🔥 GET PENDING PRESCRIPTIONS (Original DB Logic Restored)
+======================================================== */
 exports.getPendingPrescriptions = async (req, res) => {
   try {
     const [rows] = await db.execute(`
@@ -336,7 +333,6 @@ exports.getPendingPrescriptions = async (req, res) => {
         u.full_name AS patient_name,
         d.full_name AS doctor_name,
         p.created_at,
-        p.dispensing_status,
         (SELECT COUNT(*) FROM prescription_items WHERE prescription_id = p.prescription_id) AS item_count
       FROM prescriptions p
       JOIN appointments a ON p.appointment_id = a.appointment_id
@@ -344,7 +340,7 @@ exports.getPendingPrescriptions = async (req, res) => {
       JOIN users d ON a.doctor_id = d.user_id
       LEFT JOIN bills b ON b.appointment_id = a.appointment_id AND b.bill_type = 'pharmacy'
       WHERE a.status = 'completed' 
-        AND p.dispensing_status != 'dispensed'
+        AND b.bill_id IS NULL
       HAVING item_count > 0 
       ORDER BY p.created_at DESC
     `);
