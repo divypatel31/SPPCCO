@@ -3,7 +3,7 @@ import { Spinner, StatusBadge, PageHeader } from '../../components/common';
 import { formatDate, formatCurrency } from '../../utils/helpers';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
-import { Pill, ShoppingCart, Trash2, Package, CheckCircle } from 'lucide-react'; 
+import { Pill, ShoppingCart, Trash2, Package, CheckCircle, AlertCircle } from 'lucide-react'; 
 import { motion, AnimatePresence } from 'framer-motion';
 
 // --- Animations ---
@@ -23,6 +23,7 @@ export default function Prescriptions() {
   const [selected, setSelected] = useState(null);
   const [dispenseData, setDispenseData] = useState([]);
   const [generating, setGenerating] = useState(false);
+  const [inventory, setInventory] = useState(new Map()); // 🔥 Added to track total combined stock
 
   const fetchPrescriptions = async () => {
     try {
@@ -35,7 +36,25 @@ export default function Prescriptions() {
     }
   };
 
-  useEffect(() => { fetchPrescriptions(); }, []);
+  // 🔥 FETCH TOTAL INVENTORY ACROSS ALL BATCHES
+  const fetchInventory = async () => {
+    try {
+      const res = await api.get('/pharmacy/medicine');
+      const groupedMap = new Map();
+      (res.data || []).forEach(med => {
+        const nameKey = (med.name || '').trim().toLowerCase();
+        groupedMap.set(nameKey, (groupedMap.get(nameKey) || 0) + Number(med.stock));
+      });
+      setInventory(groupedMap);
+    } catch (err) {
+      console.error("Failed to load inventory map");
+    }
+  };
+
+  useEffect(() => { 
+    fetchPrescriptions(); 
+    fetchInventory(); 
+  }, []);
 
   const handleCancel = async (id) => {
     if (!window.confirm("Cancel this prescription? Use this only if the patient hasn't shown up to collect their medicines.")) return;
@@ -48,7 +67,6 @@ export default function Prescriptions() {
     }
   };
 
-  // 🔥 Smart Calculation Logic (Kept exactly as requested)
   const calculateDispensingQty = (med) => {
     const dose = Number(med.dose) || 1;
     const freq = Number(med.frequency) || 1;
@@ -72,11 +90,20 @@ export default function Prescriptions() {
     try {
       setSelected(presc);
       const res = await api.get(`/pharmacy/prescriptions/${presc.prescription_id}`);
-      const items = res.data.map(m => ({
-        ...m,
-        qty_dispensed: calculateDispensingQty(m), 
-        unit_price: m.unit_price || 0,
-      }));
+      
+      const items = res.data.map(m => {
+        const nameKey = (m.medicine_name || '').trim().toLowerCase();
+        // 🔥 Override the single batch stock with the TOTAL hospital stock!
+        const totalStock = inventory.has(nameKey) ? inventory.get(nameKey) : Number(m.stock);
+
+        return {
+          ...m,
+          stock: totalStock, 
+          qty_dispensed: calculateDispensingQty(m), 
+          unit_price: m.unit_price || 0,
+        };
+      });
+
       setDispenseData(items);
     } catch (err) {
       toast.error("Could not load medicines for this prescription");
@@ -105,6 +132,7 @@ export default function Prescriptions() {
       toast.success('Pharmacy bill generated!');
       setSelected(null);
       fetchPrescriptions();
+      fetchInventory(); // Refresh stock after selling
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to generate bill');
     } finally {
@@ -229,7 +257,6 @@ export default function Prescriptions() {
                   </span>
                 </div>
 
-                {/* 🔥 FIX: Added 'overflow-x-auto' wrapper and 'min-w-[700px]' to prevent modal stretching on small laptops */}
                 <div className="border border-slate-200/60 rounded-[16px] shadow-sm mb-6 w-full overflow-x-auto hide-scrollbar">
                   <table className="w-full text-left text-sm min-w-[700px]">
                     <thead className="bg-slate-50 border-b border-slate-200/60 text-[10px] font-semibold text-slate-500 uppercase tracking-widest">
@@ -279,8 +306,11 @@ export default function Prescriptions() {
                                 {getDisplayUnit(med)}
                               </span>
                             </div>
-                            <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 ${med.stock < med.qty_dispensed ? 'text-rose-500' : 'text-slate-400'}`}>
-                              In Stock: {med.stock || 0}
+                            
+                            {/* 🔥 Updated Warning if Out of Stock */}
+                            <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 flex items-center gap-1 ${med.stock < med.qty_dispensed ? 'text-rose-500' : 'text-slate-400'}`}>
+                              {med.stock === 0 && <AlertCircle size={10} />}
+                              Total In Stock: {med.stock || 0}
                             </p>
                           </td>
 
@@ -318,7 +348,7 @@ export default function Prescriptions() {
                   onClick={handleGenerateBill} 
                   disabled={generating || total <= 0 || dispenseData.some(m => m.stock < m.qty_dispensed)} 
                   className="px-6 py-3 rounded-xl font-medium text-white bg-emerald-600 hover:bg-emerald-700 shadow-[0_4px_20px_-4px_rgba(16,185,129,0.3)] disabled:opacity-50 disabled:shadow-none transition-all flex justify-center items-center gap-2 flex-1"
-                  title={dispenseData.some(m => m.stock < m.qty_dispensed) ? "Cannot bill. Insufficient stock." : ""}
+                  title={dispenseData.some(m => m.stock < m.qty_dispensed) ? "Cannot bill. Please reduce quantity to match available stock." : ""}
                 >
                   {generating ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <CheckCircle size={16} />}
                   {generating ? 'Processing...' : 'Confirm & Bill'}

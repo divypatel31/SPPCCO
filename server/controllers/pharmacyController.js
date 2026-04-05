@@ -16,26 +16,22 @@ exports.addMedicine = async (req, res) => {
       dispense_type
     } = req.body;
 
-    // 🛡️ VALIDATION 1: Medicine name must be text
     if (!medicine_name || typeof medicine_name !== 'string' || medicine_name.trim() === '') {
       return res.status(400).json({ message: "Medicine name is required and must be text." });
     }
 
-    // 🛡️ VALIDATION 2: Price must be a positive number greater than zero
     if (Number(unit_price) <= 0) {
       return res.status(400).json({ message: "Unit price must be greater than ₹0." });
     }
 
-    // 🛡️ VALIDATION 3: Stock and thresholds cannot be negative
     if (Number(stock) < 0 || Number(minimum_threshold) < 0) {
       return res.status(400).json({ message: "Stock quantity and threshold cannot be negative." });
     }
 
-    // 🛡️ VALIDATION 4: Expiry Date must not be in the past
     if (expiry_date) {
       const expDate = new Date(expiry_date);
       const today = new Date();
-      today.setHours(0, 0, 0, 0); // Strip time for accurate day comparison
+      today.setHours(0, 0, 0, 0); 
       if (expDate < today) {
         return res.status(400).json({ message: "Expiry date must be a valid future date." });
       }
@@ -52,10 +48,10 @@ exports.addMedicine = async (req, res) => {
         stock || 0,
         minimum_threshold || 10,
         expiry_date || null,
-        form || 'Tablet',                   // Default to Tablet
-        unit || 'mg',                       // Default to mg
-        pack_size ? Number(pack_size) : 1,  // Default to 1 pack size
-        dispense_type || 'UNIT'             // Default to UNIT
+        form || 'Tablet',
+        unit || 'mg',
+        pack_size ? Number(pack_size) : 1,
+        dispense_type || 'UNIT'
       ]
     );
 
@@ -146,7 +142,7 @@ exports.updateMedicine = async (req, res) => {
 };
 
 /* ========================================================
-   🔥 SELL MEDICINES (SMART FIFO, NO SCHEMA CHANGES) 🔥
+   🔥 SELL MEDICINES (SMART FIFO BATCH MANAGEMENT) 🔥
 ======================================================== */
 exports.sellMedicines = async (req, res) => {
   const { prescription_id, medicines } = req.body;
@@ -160,7 +156,6 @@ exports.sellMedicines = async (req, res) => {
       throw new Error("No medicines provided");
     }
 
-    // 1️⃣ Get patient info
     const [rows] = await conn.execute(`
       SELECT a.patient_id, a.appointment_id
       FROM prescriptions p
@@ -174,7 +169,6 @@ exports.sellMedicines = async (req, res) => {
     const appointment_id = rows[0].appointment_id;
     const generated_by = req.user.id;
 
-    // 2️⃣ SMART FIFO BATCH LOGIC
     let finalTotal = 0;
     const dispenseItems = []; 
 
@@ -182,7 +176,6 @@ exports.sellMedicines = async (req, res) => {
       let requestedQty = Number(med.quantity_dispensed ?? med.quantity_required) || 0;
       if (!med.medicine_id || requestedQty <= 0) continue;
 
-      // Find the NAME of the requested medicine so we can find ALL its batches
       const [baseMed] = await conn.execute(
         "SELECT name FROM medicines WHERE medicine_id = ?",
         [med.medicine_id]
@@ -191,24 +184,21 @@ exports.sellMedicines = async (req, res) => {
       if (baseMed.length === 0) continue;
       const medName = baseMed[0].name;
 
-      // FETCH ALL BATCHES OF THIS MEDICINE (Ordered by Expiry Date ASC)
-      // COALESCE ensures medicines with no expiry date go to the back of the line
+      // 🔥 ISNULL puts medicines with NO expiry date at the very end of the line
       const [batches] = await conn.execute(
         `SELECT medicine_id, stock, price 
          FROM medicines 
          WHERE name = ? AND stock > 0 
-         ORDER BY COALESCE(expiry_date, '9999-12-31') ASC`,
+         ORDER BY ISNULL(expiry_date), expiry_date ASC`,
         [medName]
       );
 
-      // Distribute the requested quantity across the oldest expiring batches first
       for (let batch of batches) {
-        if (requestedQty <= 0) break; // Finished dispensing this medicine
+        if (requestedQty <= 0) break;
 
         const availableStock = Number(batch.stock);
         const price = Number(batch.price);
         
-        // Take whatever is smaller: what we need, or what this batch has left
         const dispenseQty = Math.min(requestedQty, availableStock);
 
         finalTotal += (dispenseQty * price);
@@ -218,32 +208,28 @@ exports.sellMedicines = async (req, res) => {
           price 
         });
 
-        // Deduct from what we still need to fulfill
         requestedQty -= dispenseQty;
       }
     }
 
     if (finalTotal === 0) {
-      throw new Error("No medicines could be dispensed (out of stock or invalid data).");
+      throw new Error("No medicines could be dispensed (out of stock).");
     }
 
-    // 3️⃣ Check wallet balance BEFORE creating the bill
     const [patientRows] = await conn.execute(
       "SELECT wallet_balance FROM users WHERE user_id = ? FOR UPDATE",
       [patient_id]
     );
 
     if (patientRows[0].wallet_balance < finalTotal) {
-      throw new Error(`Insufficient wallet balance. Total pharmacy bill is ₹${finalTotal}, but patient has ₹${patientRows[0].wallet_balance}. Ask patient to top up.`);
+      throw new Error(`Insufficient wallet balance. Total bill is ₹${finalTotal}, patient has ₹${patientRows[0].wallet_balance}.`);
     }
 
-    // 4️⃣ Deduct money from wallet
     await conn.execute(
       "UPDATE users SET wallet_balance = wallet_balance - ? WHERE user_id = ?",
       [finalTotal, patient_id]
     );
 
-    // 5️⃣ Create the bill (This automatically hides the prescription from the pending queue!)
     const [billResult] = await conn.execute(`
       INSERT INTO bills 
       (appointment_id, patient_id, bill_type, generated_by, total_amount, payment_status, paid_at)
@@ -252,7 +238,6 @@ exports.sellMedicines = async (req, res) => {
 
     const bill_id = billResult.insertId;
 
-    // 6️⃣ Insert items and update stock securely across multiple batches
     for (let item of dispenseItems) {
       await conn.execute(`
         INSERT INTO bill_items (bill_id, medicine_id, quantity, price)
@@ -267,7 +252,7 @@ exports.sellMedicines = async (req, res) => {
     await conn.commit();
 
     res.json({
-      message: `Medicines dispensed using FIFO Batching. ₹${finalTotal} automatically deducted from patient's wallet.`,
+      message: `Medicines dispensed using FIFO Batching. ₹${finalTotal} automatically deducted.`,
       bill_id: bill_id,
       total_amount: finalTotal
     });
@@ -320,9 +305,6 @@ exports.getTopSellingMedicines = async (req, res) => {
   }
 };
 
-/* ========================================================
-   🔥 GET PENDING PRESCRIPTIONS (Original DB Logic Restored)
-======================================================== */
 exports.getPendingPrescriptions = async (req, res) => {
   try {
     const [rows] = await db.execute(`
@@ -439,18 +421,24 @@ exports.markBillPaid = async (req, res) => {
   }
 };
 
+/* ========================================================
+   🔥 GET BILL DETAILS (SMART GROUPING FOR FIFO BATCHES)
+======================================================== */
 exports.getBillDetails = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // 🔥 Uses SUM() and GROUP BY to combine identical items on the receipt
     const [items] = await db.execute(`
       SELECT 
-        bi.quantity, 
-        bi.price, 
         m.name AS medicine_name,
-        (bi.quantity * bi.price) AS total_price
+        bi.price, 
+        SUM(bi.quantity) AS quantity,
+        SUM(bi.quantity * bi.price) AS total_price
       FROM bill_items bi
       JOIN medicines m ON bi.medicine_id = m.medicine_id
       WHERE bi.bill_id = ?
+      GROUP BY m.name, bi.price
     `, [id]);
 
     res.json(items);
