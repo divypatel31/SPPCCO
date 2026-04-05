@@ -384,7 +384,7 @@ export default function Prescriptions() {
                                 <input
                                   type="text"
                                   className={`w-full bg-slate-50 border border-slate-200/60 text-slate-600 rounded-lg pr-3 py-1.5 text-sm font-semibold outline-none cursor-not-allowed ${fifo.isMixed ? 'px-3 text-[11px] text-center bg-amber-50 border-amber-200' : 'pl-7'}`}
-                                  value={fifo.isMixed ? "MIXED FIFO" : fifo.basePrice}
+                                  value={fifo.isMixed ? "MIXED Price" : fifo.basePrice}
                                   readOnly
                                 />
                               </div>
