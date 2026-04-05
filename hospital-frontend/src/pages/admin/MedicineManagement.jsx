@@ -147,18 +147,15 @@ export default function MedicineManagement() {
     const normalizedInputName = form.medicine_name.trim().toLowerCase();
     const inputExpiry = form.expiry_date;
 
-    // 🔥 FIND IF MEDICINE ALREADY EXISTS (Case-Insensitive)
     const existingMeds = medicines.filter(m => (m.name || '').toLowerCase() === normalizedInputName);
 
     if (existingMeds.length > 0) {
-      // Check if any existing row has the EXACT same expiry date
       const exactMatch = existingMeds.find(m => {
         const medExpiry = m.expiry_date ? m.expiry_date.split('T')[0] : '';
         return medExpiry === inputExpiry;
       });
 
       if (exactMatch) {
-        // SAME NAME & SAME EXPIRY -> UPDATE EXISTING STOCK
         if (!window.confirm(`This medicine already exists with the same expiry date. Do you want to add ${form.stock} to the existing stock of ${exactMatch.stock}?`)) {
           setSaving(false);
           return;
@@ -167,12 +164,14 @@ export default function MedicineManagement() {
         try {
           const updatedStock = Number(exactMatch.stock) + Number(form.stock);
           
+          // 🔥 FIXED: Payload matches exact backend expectation (medicine_name vs name)
           await api.put(`/pharmacy/medicine/${exactMatch.medicine_id}`, {
-            name: exactMatch.name,
+            medicine_name: exactMatch.name, // Must be 'medicine_name' for backend!
             category: form.category || exactMatch.category,
-            unit_price: form.unit_price || exactMatch.price,
+            unit_price: form.unit_price || exactMatch.price, // Ensure it maps unit_price
             stock: updatedStock,
-            expiry_date: exactMatch.expiry_date,
+            minimum_threshold: form.minimum_threshold || exactMatch.minimum_threshold || 10,
+            expiry_date: exactMatch.expiry_date ? exactMatch.expiry_date.split('T')[0] : null,
             form: exactMatch.form,
             dispense_type: exactMatch.dispense_type,
             pack_size: exactMatch.pack_size,
@@ -182,17 +181,15 @@ export default function MedicineManagement() {
           toast.success('Existing stock updated successfully!');
           setShowAdd(false); setForm(emptyForm); fetchMedicines();
         } catch (err) {
-          toast.error('Failed to update existing stock');
+          toast.error(err.response?.data?.message || 'Failed to update existing stock');
         } finally {
           setSaving(false);
         }
-        return; // Exit function so it doesn't create a new row
+        return; 
       }
     }
 
-    // IF WE REACH HERE: It's either a brand new medicine, OR an existing medicine with a DIFFERENT expiry date
     try { 
-      // Ensure backend reads 'name' properly
       await api.post('/pharmacy/medicine', { ...form, name: form.medicine_name }); 
       toast.success('New medicine batch registered!'); 
       setShowAdd(false); 
