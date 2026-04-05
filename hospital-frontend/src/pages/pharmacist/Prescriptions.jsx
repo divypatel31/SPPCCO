@@ -23,7 +23,7 @@ export default function Prescriptions() {
   const [selected, setSelected] = useState(null);
   const [dispenseData, setDispenseData] = useState([]);
   const [generating, setGenerating] = useState(false);
-  const [inventory, setInventory] = useState(new Map()); // 🔥 Added to track total combined stock
+  const [inventory, setInventory] = useState(new Map()); 
 
   const fetchPrescriptions = async () => {
     try {
@@ -36,15 +36,35 @@ export default function Prescriptions() {
     }
   };
 
-  // 🔥 FETCH TOTAL INVENTORY ACROSS ALL BATCHES
+  // 🔥 FETCH TOTAL INVENTORY & SMART FIFO PRICE
   const fetchInventory = async () => {
     try {
       const res = await api.get('/pharmacy/medicine');
       const groupedMap = new Map();
-      (res.data || []).forEach(med => {
-        const nameKey = (med.name || '').trim().toLowerCase();
-        groupedMap.set(nameKey, (groupedMap.get(nameKey) || 0) + Number(med.stock));
+      
+      // Sort to find the oldest expiring batch first (just like the backend)
+      const sortedMeds = [...(res.data || [])].sort((a, b) => {
+        const dateA = a.expiry_date ? new Date(a.expiry_date) : new Date('9999-12-31');
+        const dateB = b.expiry_date ? new Date(b.expiry_date) : new Date('9999-12-31');
+        return dateA - dateB;
       });
+
+      sortedMeds.forEach(med => {
+        const nameKey = (med.name || '').trim().toLowerCase();
+        
+        if (!groupedMap.has(nameKey)) {
+          groupedMap.set(nameKey, { totalStock: 0, activePrice: 0 });
+        }
+        
+        const current = groupedMap.get(nameKey);
+        current.totalStock += Number(med.stock);
+        
+        // Grab the price of the FIRST batch that actually has stock!
+        if (Number(med.stock) > 0 && current.activePrice === 0) {
+           current.activePrice = Number(med.price);
+        }
+      });
+      
       setInventory(groupedMap);
     } catch (err) {
       console.error("Failed to load inventory map");
@@ -93,14 +113,18 @@ export default function Prescriptions() {
       
       const items = res.data.map(m => {
         const nameKey = (m.medicine_name || '').trim().toLowerCase();
-        // 🔥 Override the single batch stock with the TOTAL hospital stock!
-        const totalStock = inventory.has(nameKey) ? inventory.get(nameKey) : Number(m.stock);
+        const invData = inventory.get(nameKey);
+        
+        const totalStock = invData ? invData.totalStock : Number(m.stock);
+        
+        // 🔥 Override old price with the CURRENT active batch price so totals match exactly!
+        const activePrice = (invData && invData.activePrice > 0) ? invData.activePrice : Number(m.unit_price);
 
         return {
           ...m,
           stock: totalStock, 
           qty_dispensed: calculateDispensingQty(m), 
-          unit_price: m.unit_price || 0,
+          unit_price: activePrice,
         };
       });
 
@@ -110,7 +134,10 @@ export default function Prescriptions() {
     }
   };
 
-  const total = dispenseData.reduce((sum, m) => sum + ((m.qty_dispensed || 0) * (m.unit_price || 0)), 0);
+  // 🔥 Strictly convert to Numbers to prevent any weird Javascript Math bugs
+  const total = dispenseData.reduce((sum, m) => {
+    return sum + (Number(m.qty_dispensed || 0) * Number(m.unit_price || 0));
+  }, 0);
 
   const handleGenerateBill = async (e) => {
     e.preventDefault();
@@ -123,8 +150,8 @@ export default function Prescriptions() {
         patient_id: selected.patient_id,
         medicines: dispenseData.map(m => ({
           medicine_id: m.medicine_id,
-          quantity_dispensed: m.qty_dispensed,
-          unit_price: m.unit_price,
+          quantity_dispensed: Number(m.qty_dispensed),
+          unit_price: Number(m.unit_price),
         })),
         total_amount: total,
       });
@@ -298,7 +325,7 @@ export default function Prescriptions() {
                                 value={med.qty_dispensed}
                                 onChange={e => {
                                   const updated = [...dispenseData];
-                                  updated[i].qty_dispensed = parseInt(e.target.value) || 0;
+                                  updated[i].qty_dispensed = Number(e.target.value) || 0;
                                   setDispenseData(updated);
                                 }}
                               />
@@ -307,7 +334,6 @@ export default function Prescriptions() {
                               </span>
                             </div>
                             
-                            {/* 🔥 Updated Warning if Out of Stock */}
                             <p className={`text-[9px] font-bold uppercase tracking-widest mt-1.5 flex items-center gap-1 ${med.stock < med.qty_dispensed ? 'text-rose-500' : 'text-slate-400'}`}>
                               {med.stock === 0 && <AlertCircle size={10} />}
                               Total In Stock: {med.stock || 0}
@@ -327,7 +353,7 @@ export default function Prescriptions() {
                           </td>
 
                           <td className="px-4 py-3 font-bold text-emerald-700 text-right">
-                            {formatCurrency((med.qty_dispensed || 0) * (med.unit_price || 0))}
+                            {formatCurrency(Number(med.qty_dispensed || 0) * Number(med.unit_price || 0))}
                           </td>
                         </tr>
                       ))}
