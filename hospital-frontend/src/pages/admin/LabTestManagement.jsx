@@ -105,7 +105,27 @@ export default function LabTestManagement() {
   const openAddModal = () => { setEditingTest(null); setForm(emptyForm); setShowModal(true); };
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); setSaving(true);
+    e.preventDefault(); 
+    
+    // 🔥 DUPLICATE CHECK LOGIC
+    const normalizedInputName = form.name.trim().toLowerCase();
+    
+    if (!normalizedInputName) {
+      return toast.error("Test name cannot be empty.");
+    }
+
+    const isDuplicate = labTests.some(test => {
+      const isSameName = test.name.toLowerCase() === normalizedInputName;
+      // If editing, ignore the current test's own name
+      const isSameTest = editingTest && test.lab_test_id === editingTest.lab_test_id;
+      return isSameName && !isSameTest;
+    });
+
+    if (isDuplicate) {
+      return toast.error("A lab test with this name already exists!");
+    }
+
+    setSaving(true);
     try {
       if (editingTest) { 
         await api.put(`/admin/lab-tests/${editingTest.lab_test_id}`, form); 
@@ -295,4 +315,4 @@ export default function LabTestManagement() {
 
     </motion.div>
   );
-} 
+}

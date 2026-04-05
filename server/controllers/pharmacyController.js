@@ -73,19 +73,16 @@ exports.getMedicines = async (req, res) => {
     const [rows] = await db.execute(
       "SELECT * FROM medicines ORDER BY created_at DESC"
     );
-
     res.json(rows);
-
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-/* Update Medicine (🔥 FIXED: Now includes form, unit, pack_size, dispense_type) */
+/* Update Medicine */
 exports.updateMedicine = async (req, res) => {
   try {
     const { id } = req.params;
-
     const {
       medicine_name,
       category,
@@ -148,7 +145,9 @@ exports.updateMedicine = async (req, res) => {
   }
 };
 
-/* Sell Medicines */
+/* ========================================================
+   🔥 SELL MEDICINES (SMART FIFO BATCH MANAGEMENT) 🔥
+======================================================== */
 exports.sellMedicines = async (req, res) => {
   const { prescription_id, medicines } = req.body;
   const conn = await db.getConnection();
@@ -175,29 +174,53 @@ exports.sellMedicines = async (req, res) => {
     const appointment_id = rows[0].appointment_id;
     const generated_by = req.user.id;
 
-    // 2️⃣ Pre-calculate total amount to check wallet FIRST
+    // 2️⃣ SMART FIFO BATCH LOGIC
     let finalTotal = 0;
     const dispenseItems = []; 
 
     for (let med of medicines) {
-      const requestedQty = Number(med.quantity_dispensed ?? med.quantity_required) || 0;
+      let requestedQty = Number(med.quantity_dispensed ?? med.quantity_required) || 0;
       if (!med.medicine_id || requestedQty <= 0) continue;
 
-      const [stockRows] = await conn.execute(
-        `SELECT stock, price FROM medicines WHERE medicine_id = ?`,
+      // Find the NAME of the requested medicine so we can find ALL its batches
+      const [baseMed] = await conn.execute(
+        "SELECT name FROM medicines WHERE medicine_id = ?",
         [med.medicine_id]
       );
 
-      if (stockRows.length === 0) continue;
+      if (baseMed.length === 0) continue;
+      const medName = baseMed[0].name;
 
-      const stock = Number(stockRows[0].stock);
-      const price = Number(stockRows[0].price);
-      
-      const dispenseQty = Math.min(requestedQty, stock);
-      if (dispenseQty <= 0) continue;
+      // FETCH ALL BATCHES OF THIS MEDICINE (Ordered by Expiry Date ASC)
+      // COALESCE ensures medicines with no expiry date go to the back of the line
+      const [batches] = await conn.execute(
+        `SELECT medicine_id, stock, price 
+         FROM medicines 
+         WHERE name = ? AND stock > 0 
+         ORDER BY COALESCE(expiry_date, '9999-12-31') ASC`,
+        [medName]
+      );
 
-      finalTotal += (dispenseQty * price);
-      dispenseItems.push({ medicine_id: med.medicine_id, dispenseQty, price });
+      // Distribute the requested quantity across the oldest expiring batches first
+      for (let batch of batches) {
+        if (requestedQty <= 0) break; // Finished dispensing this medicine
+
+        const availableStock = Number(batch.stock);
+        const price = Number(batch.price);
+        
+        // Take whatever is smaller: what we need, or what this batch has left
+        const dispenseQty = Math.min(requestedQty, availableStock);
+
+        finalTotal += (dispenseQty * price);
+        dispenseItems.push({ 
+          medicine_id: batch.medicine_id, 
+          dispenseQty, 
+          price 
+        });
+
+        // Deduct from what we still need to fulfill
+        requestedQty -= dispenseQty;
+      }
     }
 
     if (finalTotal === 0) {
@@ -220,7 +243,7 @@ exports.sellMedicines = async (req, res) => {
       [finalTotal, patient_id]
     );
 
-    // 5️⃣ Create the bill (Marked as PAID immediately since wallet was charged)
+    // 5️⃣ Create the bill
     const [billResult] = await conn.execute(`
       INSERT INTO bills 
       (appointment_id, patient_id, bill_type, generated_by, total_amount, payment_status, paid_at)
@@ -229,7 +252,7 @@ exports.sellMedicines = async (req, res) => {
 
     const bill_id = billResult.insertId;
 
-    // 6️⃣ Insert items and update stock securely
+    // 6️⃣ Insert items and update stock securely across multiple batches
     for (let item of dispenseItems) {
       await conn.execute(`
         INSERT INTO bill_items (bill_id, medicine_id, quantity, price)
@@ -241,10 +264,16 @@ exports.sellMedicines = async (req, res) => {
       `, [item.dispenseQty, item.medicine_id]);
     }
 
+    // 7️⃣ Update the Prescription Status so it clears from the Queue
+    await conn.execute(
+      "UPDATE prescriptions SET dispensing_status = 'dispensed' WHERE prescription_id = ?",
+      [prescription_id]
+    );
+
     await conn.commit();
 
     res.json({
-      message: `Medicines dispensed successfully. ₹${finalTotal} automatically deducted from patient's wallet.`,
+      message: `Medicines dispensed using FIFO Batching. ₹${finalTotal} automatically deducted from patient's wallet.`,
       bill_id: bill_id,
       total_amount: finalTotal
     });
@@ -263,9 +292,7 @@ exports.getLowStock = async (req, res) => {
     const [rows] = await db.execute(
       "SELECT * FROM medicines WHERE stock <= 10 ORDER BY stock ASC"
     );
-
     res.json(rows);
-
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -294,7 +321,6 @@ exports.getTopSellingMedicines = async (req, res) => {
         total_revenue: Number(r.total_revenue)
       }))
     );
-
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -310,6 +336,7 @@ exports.getPendingPrescriptions = async (req, res) => {
         u.full_name AS patient_name,
         d.full_name AS doctor_name,
         p.created_at,
+        p.dispensing_status,
         (SELECT COUNT(*) FROM prescription_items WHERE prescription_id = p.prescription_id) AS item_count
       FROM prescriptions p
       JOIN appointments a ON p.appointment_id = a.appointment_id
@@ -317,7 +344,7 @@ exports.getPendingPrescriptions = async (req, res) => {
       JOIN users d ON a.doctor_id = d.user_id
       LEFT JOIN bills b ON b.appointment_id = a.appointment_id AND b.bill_type = 'pharmacy'
       WHERE a.status = 'completed' 
-        AND b.bill_id IS NULL
+        AND p.dispensing_status != 'dispensed'
       HAVING item_count > 0 
       ORDER BY p.created_at DESC
     `);
@@ -332,27 +359,18 @@ exports.getPendingPrescriptions = async (req, res) => {
 exports.cancelPrescription = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    // First, delete the items to prevent foreign key constraint errors
     await db.execute("DELETE FROM prescription_items WHERE prescription_id = ?", [id]);
-    
-    // Then, delete the prescription itself
     await db.execute("DELETE FROM prescriptions WHERE prescription_id = ?", [id]);
-    
     res.json({ message: "Prescription successfully removed due to no-show." });
-    
   } catch (error) {
     console.error("CANCEL ERROR:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
-/* 🔥 FIXED: Now fetches ALL data so the frontend can do the Smart Math! */
 exports.getPrescriptionItems = async (req, res) => {
   try {
     const id = req.params.id;
-
-    // Fetch every single detail needed for dispensing math
     const [items] = await db.execute(`
       SELECT 
         pi.medicine_id,
@@ -376,10 +394,7 @@ exports.getPrescriptionItems = async (req, res) => {
       WHERE pi.prescription_id = ?
     `, [id]);
     
-    // We NO LONGER calculate 'quantity_required' in the backend. 
-    // We pass the raw data straight to the frontend's Smart Calculator.
     res.json(items);
-
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -402,7 +417,6 @@ exports.getPharmacyBills = async (req, res) => {
       WHERE b.bill_type = 'pharmacy'
       ORDER BY b.created_at DESC
     `);
-
     res.json(rows);
   } catch (err) {
     console.error("Bills Error:", err);
@@ -412,36 +426,26 @@ exports.getPharmacyBills = async (req, res) => {
 
 exports.markBillPaid = async (req, res) => {
   const { id } = req.params;
-
   try {
     const [result] = await db.execute(`
       UPDATE bills
-      SET 
-        payment_status = 'paid',
-        paid_at = NOW()
-      WHERE bill_id = ?
-        AND bill_type = 'pharmacy'
+      SET payment_status = 'paid', paid_at = NOW()
+      WHERE bill_id = ? AND bill_type = 'pharmacy'
     `, [id]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ message: "Bill not found" });
     }
-
     res.json({ message: "Bill marked as paid successfully" });
-
   } catch (err) {
     console.error("MARK BILL PAID ERROR:", err);
     res.status(500).json({ message: err.message });
   }
 };
 
-/* ==========================================
-   GET BILL DETAILS (ITEMS INSIDE A BILL)
-========================================== */
 exports.getBillDetails = async (req, res) => {
   try {
     const { id } = req.params;
-
     const [items] = await db.execute(`
       SELECT 
         bi.quantity, 
@@ -460,13 +464,9 @@ exports.getBillDetails = async (req, res) => {
   }
 };
 
-/* ==========================================
-   DELETE MEDICINE
-========================================== */
 exports.deleteMedicine = async (req, res) => {
   try {
     const { id } = req.params;
-
     const [result] = await db.execute(
       "DELETE FROM medicines WHERE medicine_id = ?",
       [id]
@@ -477,17 +477,13 @@ exports.deleteMedicine = async (req, res) => {
     }
 
     res.json({ message: "Medicine deleted successfully" });
-
   } catch (error) {
     console.error("DELETE MEDICINE ERROR:", error);
-    
-    // 🛡️ SAFETY CHECK: If the medicine is linked to an old bill or prescription, SQL blocks it.
     if (error.code === 'ER_ROW_IS_REFERENCED_2' || error.code === 'ER_ROW_IS_REFERENCED') {
       return res.status(400).json({ 
         message: "Cannot delete! This medicine has already been prescribed to patients or sold in bills. Please update its stock to 0 instead." 
       });
     }
-    
     res.status(500).json({ error: error.message });
   }
 };

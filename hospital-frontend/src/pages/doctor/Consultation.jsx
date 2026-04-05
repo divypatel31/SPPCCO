@@ -83,9 +83,36 @@ export default function ConsultationPage() {
     }
   }, [appt?.patient_id, id]);
 
-  /* Fetch medicines & lab tests */
+  /* 🔥 SMART GROUPED MEDICINE FETCHING */
   useEffect(() => {
-    api.get('/pharmacy/medicine').then(res => setMedicineList(res.data || [])).catch(() => {});
+    api.get('/pharmacy/medicine').then(res => {
+      const rawMeds = res.data || [];
+      const groupedMap = new Map();
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      rawMeds.forEach(med => {
+        const nameKey = (med.name || '').trim().toLowerCase();
+        const expDate = med.expiry_date ? new Date(med.expiry_date) : null;
+        const isExpired = expDate && expDate < today;
+
+        // Only show medicines that are NOT expired and HAVE stock
+        if (!isExpired && Number(med.stock) > 0) {
+          if (!groupedMap.has(nameKey)) {
+            // First time seeing this medicine, add it to the map
+            groupedMap.set(nameKey, { ...med, total_stock: Number(med.stock) });
+          } else {
+            // Already exists! Just add this batch's stock to the total
+            groupedMap.get(nameKey).total_stock += Number(med.stock);
+          }
+        }
+      });
+
+      // Convert the Map back to a clean array for the dropdown
+      setMedicineList(Array.from(groupedMap.values()));
+    }).catch(() => {});
+
     api.get('/test').then(res => setLabTests(res.data || [])).catch(() => {});
   }, []);
 
@@ -166,28 +193,33 @@ export default function ConsultationPage() {
     }
   };
 
+  /* 🔥 FAST LAB REQUEST OPTIMIZATION (Promise.all) */
   const saveLabRequest = async () => {
     const valid = labRequests.filter(l => l.test);
     if (valid.length === 0) return toast.error('Select at least one test');
 
     setSaving(true);
     try {
-      for (const req of valid) {
+      const requests = valid.map(req => {
         const selectedTest = labTests.find(t => t.lab_test_id === Number(req.test));
-        await api.post('/lab-request', {
+        return api.post('/lab-request', {
           appointment_id: id,
           test_name: selectedTest.name,
           department: selectedTest.department,
           test_price: selectedTest.price 
         });
-      }
-      toast.success('Lab request sent!');
+      });
+
+      // Send all requests simultaneously
+      await Promise.all(requests);
+
+      toast.success('Lab requests sent!');
       setLabRequests([{ test: '' }]);
       
       const res = await api.get(`/doctor/appointments/${id}`);
       setAppt(res.data);
     } catch (err) {
-      toast.error('Failed to submit lab request');
+      toast.error('Failed to submit lab requests');
     } finally {
       setSaving(false);
     }
@@ -236,7 +268,8 @@ export default function ConsultationPage() {
     updated[i][field] = val;
 
     if (field === 'medicine_id' && val !== '') {
-      const selectedMed = medicineList.find(m => m.medicine_id === Number(val));
+      // 🔥 SAFETY FIX: Compare as strings
+      const selectedMed = medicineList.find(m => String(m.medicine_id) === String(val));
       if (selectedMed) {
         let newUnit = 'tablet';
         if (selectedMed.form === 'Syrup') newUnit = 'ml';
@@ -450,11 +483,11 @@ export default function ConsultationPage() {
                         <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5 block">Select Medicine</label>
                         <select className="w-full p-3 bg-slate-50 border border-slate-200/60 rounded-xl text-sm font-semibold text-slate-800 outline-none focus:border-teal-400 focus:ring-2 focus:ring-teal-500/10" disabled={isCompleted} value={med.medicine_id} onChange={e => updateMedicine(i, 'medicine_id', e.target.value)}>
                           <option value="">-- Choose from inventory --</option>
-                          {medicineList.map(m => <option key={m.medicine_id} value={m.medicine_id}>{m.name}</option>)}
+                          {/* 🔥 UPDATED DROPDOWN: Shows Total Stock Count */}
+                          {medicineList.map(m => <option key={m.medicine_id} value={m.medicine_id}>{m.name} ({m.total_stock} in stock)</option>)}
                         </select>
                       </div>
 
-                      {/* 🔥 FIXED DOSE INPUT: Blocks typing negatives, enforces min="0.5" */}
                       <div className="col-span-6 md:col-span-2">
                         <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5 block">Dose</label>
                         <input 
@@ -480,7 +513,6 @@ export default function ConsultationPage() {
                         </select>
                       </div>
 
-                      {/* 🔥 FIXED DURATION INPUT: Blocks decimals and negatives, enforces min="1" */}
                       <div className="col-span-12 md:col-span-3">
                         <label className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1.5 block">Duration (Days)</label>
                         <input 

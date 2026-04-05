@@ -94,6 +94,25 @@ export default function DepartmentManagement() {
 
   const handleAdd = async (e) => {
     e.preventDefault();
+    
+    // 🔥 DUPLICATE CHECK LOGIC
+    const normalizedInputName = form.name.trim().toLowerCase();
+    
+    if (!normalizedInputName) {
+      return toast.error("Department name cannot be empty.");
+    }
+
+    const isDuplicate = departments.some(dept => {
+      const isSameName = dept.name.toLowerCase() === normalizedInputName;
+      // If editing, ignore the current department's own name
+      const isSameDept = editingDept && dept.department_id === editingDept.department_id;
+      return isSameName && !isSameDept;
+    });
+
+    if (isDuplicate) {
+      return toast.error("A department with this name already exists!");
+    }
+
     setSaving(true);
     try {
       if (editingDept) {

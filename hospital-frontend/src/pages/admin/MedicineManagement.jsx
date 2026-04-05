@@ -54,8 +54,8 @@ function MedicineForm({ open, onClose, onSubmit, title, form, setForm, saving })
                 <input className="w-full border border-slate-200/60 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl py-3 px-4 text-sm font-medium transition-all outline-none" placeholder="e.g. Analgesic" name="category" value={form.category} onChange={handleChange} />
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5 block">Expiry Date</label>
-                <input type="date" className="w-full border border-slate-200/60 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl py-3 px-4 text-sm font-medium transition-all outline-none" name="expiry_date" value={form.expiry_date} onChange={handleChange} />
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5 block">Expiry Date *</label>
+                <input type="date" className="w-full border border-slate-200/60 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 rounded-xl py-3 px-4 text-sm font-medium transition-all outline-none" name="expiry_date" value={form.expiry_date} onChange={handleChange} required />
               </div>
               <div>
                 <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-widest mb-1.5 block">Unit Price (₹) *</label>
@@ -141,15 +141,77 @@ export default function MedicineManagement() {
   useEffect(() => { fetchMedicines(); }, []);
 
   const handleAdd = async (e) => {
-    e.preventDefault(); setSaving(true);
-    try { await api.post('/pharmacy/medicine', form); toast.success('Medicine added successfully!'); setShowAdd(false); setForm(emptyForm); fetchMedicines(); } 
+    e.preventDefault();
+    setSaving(true);
+
+    const normalizedInputName = form.medicine_name.trim().toLowerCase();
+    const inputExpiry = form.expiry_date;
+
+    // 🔥 FIND IF MEDICINE ALREADY EXISTS (Case-Insensitive)
+    const existingMeds = medicines.filter(m => (m.name || '').toLowerCase() === normalizedInputName);
+
+    if (existingMeds.length > 0) {
+      // Check if any existing row has the EXACT same expiry date
+      const exactMatch = existingMeds.find(m => {
+        const medExpiry = m.expiry_date ? m.expiry_date.split('T')[0] : '';
+        return medExpiry === inputExpiry;
+      });
+
+      if (exactMatch) {
+        // SAME NAME & SAME EXPIRY -> UPDATE EXISTING STOCK
+        if (!window.confirm(`This medicine already exists with the same expiry date. Do you want to add ${form.stock} to the existing stock of ${exactMatch.stock}?`)) {
+          setSaving(false);
+          return;
+        }
+
+        try {
+          const updatedStock = Number(exactMatch.stock) + Number(form.stock);
+          
+          await api.put(`/pharmacy/medicine/${exactMatch.medicine_id}`, {
+            name: exactMatch.name,
+            category: form.category || exactMatch.category,
+            unit_price: form.unit_price || exactMatch.price,
+            stock: updatedStock,
+            expiry_date: exactMatch.expiry_date,
+            form: exactMatch.form,
+            dispense_type: exactMatch.dispense_type,
+            pack_size: exactMatch.pack_size,
+            unit: exactMatch.unit
+          });
+          
+          toast.success('Existing stock updated successfully!');
+          setShowAdd(false); setForm(emptyForm); fetchMedicines();
+        } catch (err) {
+          toast.error('Failed to update existing stock');
+        } finally {
+          setSaving(false);
+        }
+        return; // Exit function so it doesn't create a new row
+      }
+    }
+
+    // IF WE REACH HERE: It's either a brand new medicine, OR an existing medicine with a DIFFERENT expiry date
+    try { 
+      // Ensure backend reads 'name' properly
+      await api.post('/pharmacy/medicine', { ...form, name: form.medicine_name }); 
+      toast.success('New medicine batch registered!'); 
+      setShowAdd(false); 
+      setForm(emptyForm); 
+      fetchMedicines(); 
+    } 
     catch (err) { toast.error(err.response?.data?.message || 'Failed to add medicine'); } 
     finally { setSaving(false); }
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault(); setSaving(true);
-    try { await api.put(`/pharmacy/medicine/${editItem.medicine_id}`, form); toast.success('Medicine updated successfully!'); setEditItem(null); setForm(emptyForm); fetchMedicines(); } 
+    try { 
+      await api.put(`/pharmacy/medicine/${editItem.medicine_id}`, { ...form, name: form.medicine_name }); 
+      toast.success('Medicine updated successfully!'); 
+      setEditItem(null); 
+      setForm(emptyForm); 
+      fetchMedicines(); 
+    } 
     catch (err) { toast.error(err.response?.data?.message || 'Failed to update'); } 
     finally { setSaving(false); }
   };
@@ -174,9 +236,12 @@ export default function MedicineManagement() {
 
   // 2. Apply Filters (Status + Search)
   const filteredAndSearchedMedicines = processedMedicines.filter(med => {
+    const medName = med.name || '';
+    const medCategory = med.category || '';
+
     // Search Filter
-    const matchesSearch = med.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (med.category && med.category.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesSearch = medName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          medCategory.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
 
     // Status Filter
@@ -187,7 +252,7 @@ export default function MedicineManagement() {
     return true;
   }).sort((a, b) => {
     if (a.diffDays === null) return 1; if (b.diffDays === null) return -1;
-    return a.diffDays - b.diffDays;
+    return a.diffDays - b.diffDays; // Sort closest expiry to the top
   });
 
   if (loading) {
