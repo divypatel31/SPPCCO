@@ -72,15 +72,19 @@ MediCare is a state-of-the-art, comprehensive Hospital Management System (HMS) d
 Make sure you have [Node.js](https://nodejs.org/) and MySQL installed on your local machine.
 
 ### 1. Clone the repository
-```bash
+```
 git clone [https://github.com/yourusername/medicare-hms.git](https://github.com/yourusername/medicare-hms.git)
 cd medicare-hms
+```
+
 2. Setup the Backend
-Bash
+```
 cd server
 npm install
-Create a .env file in the server directory and add your environment variables:
+```
 
+Create a .env file in the server directory and add your environment variables:
+```
 Code snippet
 PORT=5000
 DB_HOST=localhost
@@ -91,19 +95,26 @@ JWT_SECRET=your_super_secret_key
 EMAIL_USER=your_brevo_smtp_email
 EMAIL_PASS=your_brevo_smtp_password
 Start the backend server:
+```
 
-Bash
+```
 npm run dev
+```
+
 3. Setup the Frontend
 Open a new terminal window:
 
-Bash
+```
 cd hospital-frontend
 npm install
+```
+
 Start the Vite development server:
 
-Bash
+```
 npm run dev
+```
+
 The application will now be running on http://localhost:5173.
 
 📂 Project Structure
