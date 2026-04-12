@@ -117,6 +117,7 @@ npm run dev
 
 The application will now be running on http://localhost:5173.
 
+```
 📂 Project Structure
 Plaintext
 📦 medicare-hms
@@ -140,3 +141,4 @@ Plaintext
    ┣ 📂 middleware           # Auth & Role validation
    ┣ 📂 routes               # Express API endpoints
    ┗ 📜 server.js            # App entry point
+```
